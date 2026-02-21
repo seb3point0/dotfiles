@@ -156,8 +156,9 @@ setup_nvim() {
 
     if command -v nvim &>/dev/null; then
         info "Installing nvim plugins (headless)..."
-        nvim --headless "+Lazy! sync" +qa 2>/dev/null || \
-            warn "nvim plugin sync returned non-zero (may be fine on first run)"
+        nvim --headless -c "lua require('lazy').sync({wait=true})" -c "qa" || \
+            warn "nvim plugin sync returned non-zero — check :Lazy in nvim for details"
+        success "nvim plugins installed"
     fi
 }
 
