@@ -39,8 +39,6 @@
     # =========================[ Line #2 ]=========================
     newline                 # \n
     # prompt_char           # prompt symbol
-    # =========================[ Line #3 ]=========================
-    newline                 # blank line before tmux status bar
   )
 
   # The list of segments shown on the right. Fill it with less important segments.
