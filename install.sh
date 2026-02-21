@@ -59,9 +59,11 @@ install_brew_packages() {
         zsh
         fzf
         bat
+        eza
         ripgrep
         node
         gh
+        kubectl
     )
 
     for pkg in "${packages[@]}"; do
@@ -74,6 +76,53 @@ install_brew_packages() {
     done
 
     success "Brew packages installed"
+}
+
+# ============================================================================
+# Tap packages (third-party brew taps)
+# ============================================================================
+
+install_tap_packages() {
+    info "Installing tap packages..."
+
+    # Format: "tap/formula" — brew installs the tap automatically
+    local tap_packages=(
+        "scaleway/tap/scw"
+        "supabase/tap/supabase"
+        "stripe/stripe-cli/stripe"
+    )
+
+    for formula in "${tap_packages[@]}"; do
+        local pkg="${formula##*/}"
+        if brew list "$pkg" &>/dev/null; then
+            info "  $pkg — already installed"
+        else
+            info "  $pkg — installing..."
+            brew install "$formula"
+        fi
+    done
+
+    success "Tap packages installed"
+}
+
+# ============================================================================
+# Claude Code (npm global)
+# ============================================================================
+
+install_claude_code() {
+    if command -v claude &>/dev/null; then
+        info "Claude Code already installed"
+        return
+    fi
+
+    if ! command -v npm &>/dev/null; then
+        warn "npm not found — skipping Claude Code install"
+        return
+    fi
+
+    info "Installing Claude Code..."
+    npm install -g @anthropic-ai/claude-code
+    success "Claude Code installed"
 }
 
 # ============================================================================
@@ -248,6 +297,8 @@ main() {
 
     install_brew
     install_brew_packages
+    install_tap_packages
+    install_claude_code
     install_ohmyzsh
     install_zsh_plugins
     install_powerlevel10k

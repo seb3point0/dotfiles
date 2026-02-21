@@ -36,6 +36,7 @@ source $ZSH/oh-my-zsh.sh
 
 # Preferred editor
 export EDITOR='nvim'
+export CLAUDECODE=0
 
 # ls colors — Gruvbox palette
 # dir=bold blue, symlink=bold cyan, exec=bold green, pipe=bold yellow, socket=bold red
@@ -65,10 +66,21 @@ export LESS_TERMCAP_mr=$(tput rev)
 export LESS_TERMCAP_mh=$(tput dim)
 
 # Useful aliases
-alias ll='ls -lah'
-alias la='ls -A'
-alias l='ls -CF'
 alias myip='curl -s ifconfig.me'
+
+# eza — modern ls replacement
+if command -v eza &>/dev/null; then
+  alias ls='eza --icons'
+  alias l='eza -1 --icons'
+  alias ll='eza -lh --icons --git'
+  alias la='eza -lah --icons --git'
+  alias lt='eza --tree --icons'
+  alias lta='eza --tree --icons -a'
+else
+  alias ll='ls -lah'
+  alias la='ls -A'
+  alias l='ls -CF'
+fi
 
 # Docker shortcuts
 alias dps='docker ps'
