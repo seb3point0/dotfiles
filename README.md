@@ -10,9 +10,17 @@ Personal shell, editor, and terminal configuration. Works on macOS and Linux via
 
 ## Install
 
+One-liner:
+
 ```bash
-git clone https://github.com/seb3point0/dotfiles.git ~/dotfiles
-cd ~/dotfiles
+curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/bootstrap.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/seb3point0/dotfiles.git ~/.dotfiles
+cd ~/.dotfiles
 ./install.sh
 ```
 
@@ -41,7 +49,7 @@ Put machine-specific paths, env vars, and secrets in `~/.zshrc.local` — it's s
 ## Updating
 
 ```bash
-cd ~/dotfiles
+cd ~/.dotfiles
 git pull
 ```
 
