@@ -3,6 +3,8 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+export TERM="xterm-256color"
+
 # Homebrew
 if [[ -f /opt/homebrew/bin/brew ]]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -13,8 +15,9 @@ fi
 # Path to your Oh My Zsh installation
 export ZSH="$HOME/.oh-my-zsh"
 
-# Theme — powerlevel10k is sourced separately below
-ZSH_THEME=""
+# Powerlevel10k theme (loaded by oh-my-zsh)
+ZSH_THEME="powerlevel10k/powerlevel10k"
+DEFAULT_USER=$(whoami)
 
 # Let tmux handle window titles
 DISABLE_AUTO_TITLE="true"
@@ -30,10 +33,6 @@ COMPLETION_WAITING_DOTS="true"
 plugins=(git z zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
-
-# Powerlevel10k
-[[ -f ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k/powerlevel10k.zsh-theme ]] && \
-  source ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k/powerlevel10k.zsh-theme
 
 # Preferred editor
 export EDITOR='nvim'
