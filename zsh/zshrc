@@ -1,0 +1,110 @@
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# Homebrew
+if [[ -f /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -f /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
+# Path to your Oh My Zsh installation
+export ZSH="$HOME/.oh-my-zsh"
+
+# Theme — powerlevel10k is sourced separately below
+ZSH_THEME=""
+
+# Let tmux handle window titles
+DISABLE_AUTO_TITLE="true"
+
+# Enable command auto-correction
+ENABLE_CORRECTION="true"
+unsetopt correct_all
+
+# Show red dots whilst waiting for completion
+COMPLETION_WAITING_DOTS="true"
+
+# Plugins
+plugins=(git z zsh-autosuggestions zsh-syntax-highlighting)
+
+source $ZSH/oh-my-zsh.sh
+
+# Powerlevel10k
+[[ -f ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k/powerlevel10k.zsh-theme ]] && \
+  source ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k/powerlevel10k.zsh-theme
+
+# Preferred editor
+export EDITOR='nvim'
+
+# Local bin
+export PATH="$HOME/.local/bin:$PATH"
+
+# Use ripgrep for fzf if available
+if command -v rg &>/dev/null; then
+  export FZF_DEFAULT_COMMAND='rg --files --hidden -g "!{.git,node_modules}"'
+fi
+
+# Load fzf
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# Colorized man pages
+export MANROFFOPT='-c'
+export LESS_TERMCAP_mb=$(tput bold; tput setaf 2)
+export LESS_TERMCAP_md=$(tput bold; tput setaf 6)
+export LESS_TERMCAP_me=$(tput sgr0)
+export LESS_TERMCAP_so=$(tput bold; tput setaf 3; tput setab 4)
+export LESS_TERMCAP_se=$(tput rmso; tput sgr0)
+export LESS_TERMCAP_us=$(tput smul; tput bold; tput setaf 7)
+export LESS_TERMCAP_ue=$(tput rmul; tput sgr0)
+export LESS_TERMCAP_mr=$(tput rev)
+export LESS_TERMCAP_mh=$(tput dim)
+
+# Useful aliases
+alias ll='ls -lah'
+alias la='ls -A'
+alias l='ls -CF'
+alias myip='curl -s ifconfig.me'
+
+# Docker shortcuts
+alias dps='docker ps'
+alias dpsa='docker ps -a'
+alias dlogs='docker logs -f'
+alias dexec='docker exec -it'
+
+# Tmux window naming for SSH and Claude Code
+if [[ -n "$TMUX" ]]; then
+  ssh() {
+    local host="" skip_next=0
+    for arg in "$@"; do
+      if (( skip_next )); then skip_next=0; continue; fi
+      case "$arg" in
+        -[bcDEeFIiJLlmOopQRSWw]) skip_next=1 ;;
+        -*) ;;
+        *) host="${arg#*@}"; break ;;
+      esac
+    done
+    [[ -n "$host" ]] && tmux rename-window "󰌘 ${host}"
+    command ssh "$@"
+    tmux set-window-option automatic-rename on
+  }
+
+  claude() {
+    tmux rename-window " claude"
+    command claude "$@"
+    tmux set-window-option automatic-rename on
+  }
+fi
+
+# Auto-attach to tmux session when opening a terminal
+if command -v tmux &>/dev/null && [[ -z "$TMUX" && -z "$INSIDE_EMACS" && -z "$VSCODE_PID" ]]; then
+  tmux attach -t default 2>/dev/null || tmux new-session -s default
+fi
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# Machine-specific overrides (paths, env vars, secrets, etc.)
+# This file is not tracked by git — create it with anything local to this machine.
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
