@@ -6,13 +6,13 @@ set -euo pipefail
 # Installs brew, shell tooling, and symlinks configs.
 # Safe to re-run: skips anything already present.
 #
-# Fresh install: curl -fsSL https://raw.githubusercontent.com/demonik-xyz/dotfiles/main/install.sh | bash
+# Fresh install: curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/install.sh | bash
 # ============================================================================
 
 # If not running from a file (e.g. curl | bash), clone/pull the repo and re-exec
 if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
     _dotfiles="$HOME/.dotfiles"
-    _repo="https://github.com/demonik-xyz/dotfiles.git"
+    _repo="https://github.com/seb3point0/dotfiles.git"
     if [[ -d "$_dotfiles/.git" ]]; then
         echo "Dotfiles already at $_dotfiles — pulling latest..."
         git -C "$_dotfiles" pull --ff-only
