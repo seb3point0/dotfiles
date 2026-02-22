@@ -6,13 +6,13 @@ set -euo pipefail
 # Installs brew, shell tooling, and symlinks configs.
 # Safe to re-run: skips anything already present.
 #
-# Fresh install: curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/install.sh | bash
+# Fresh install: curl -fsSL https://raw.githubusercontent.com/demonik-xyz/dotfiles/main/install.sh | bash
 # ============================================================================
 
 # If not running from a file (e.g. curl | bash), clone/pull the repo and re-exec
 if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
     _dotfiles="$HOME/.dotfiles"
-    _repo="https://github.com/seb3point0/dotfiles.git"
+    _repo="https://github.com/demonik-xyz/dotfiles.git"
     if [[ -d "$_dotfiles/.git" ]]; then
         echo "Dotfiles already at $_dotfiles — pulling latest..."
         git -C "$_dotfiles" pull --ff-only
@@ -45,6 +45,8 @@ OS="$(uname -s)"
 install_brew() {
     if command -v brew &>/dev/null; then
         info "Homebrew already installed"
+        # Remove any taps with broken remotes so `brew update` doesn't fail
+        brew untap scaleway/tap 2>/dev/null && warn "Removed broken scaleway/tap (will reinstall)" || true
         return
     fi
 
@@ -87,7 +89,7 @@ install_brew_packages() {
             info "  $pkg — already installed"
         else
             info "  $pkg — installing..."
-            brew install "$pkg"
+            brew install "$pkg" || warn "  $pkg — install failed (non-fatal, install manually if needed)"
         fi
     done
 
@@ -114,7 +116,7 @@ install_tap_packages() {
             info "  $pkg — already installed"
         else
             info "  $pkg — installing..."
-            brew install "$formula"
+            brew install "$formula" || warn "  $pkg — install failed (non-fatal, install manually if needed)"
         fi
     done
 
