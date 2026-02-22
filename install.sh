@@ -120,7 +120,6 @@ install_tap_packages() {
     # Note: scw is in homebrew-core, installed via install_brew_packages instead
     local tap_packages=(
         "supabase/tap/supabase"
-        "stripe/stripe-cli/stripe"
     )
 
     for formula in "${tap_packages[@]}"; do
@@ -134,6 +133,33 @@ install_tap_packages() {
     done
 
     success "Tap packages installed"
+}
+
+# ============================================================================
+# Stripe CLI
+# ============================================================================
+
+install_stripe() {
+    if command -v stripe &>/dev/null; then
+        info "Stripe CLI already installed"
+        return
+    fi
+
+    if [[ "$OS" == "Darwin" ]]; then
+        info "Installing Stripe CLI via brew..."
+        brew install stripe/stripe-cli/stripe || warn "Stripe CLI install failed (non-fatal, install manually if needed)"
+    else
+        info "Installing Stripe CLI via apt..."
+        curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/stripe.gpg >/dev/null
+        echo "deb [signed-by=/usr/share/keyrings/stripe.gpg] https://packages.stripe.dev/stripe-cli-debian-local stable main" \
+            | sudo tee /etc/apt/sources.list.d/stripe.list >/dev/null
+        sudo apt update -qq
+        sudo apt install -y stripe || warn "Stripe CLI install failed (non-fatal, install manually if needed)"
+    fi
+
+    success "Stripe CLI installed"
 }
 
 # ============================================================================
@@ -329,6 +355,7 @@ main() {
     install_brew
     install_brew_packages
     install_tap_packages
+    install_stripe
     install_claude_code
     install_ohmyzsh
     install_zsh_plugins
