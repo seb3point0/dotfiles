@@ -94,6 +94,7 @@ install_brew_packages() {
         node
         gh
         kubectl
+        scw
     )
 
     for pkg in "${packages[@]}"; do
@@ -113,17 +114,11 @@ install_brew_packages() {
 # ============================================================================
 
 install_tap_packages() {
-    # Third-party tap packages are macOS dev tools — skip on Linux servers
-    if [[ "$OS" != "Darwin" ]]; then
-        info "Skipping tap packages (Linux — dev tools not needed on servers)"
-        return
-    fi
-
     info "Installing tap packages..."
 
     # Format: "tap/formula" — brew installs the tap automatically
+    # Note: scw is in homebrew-core, installed via install_brew_packages instead
     local tap_packages=(
-        "scaleway/tap/scw"
         "supabase/tap/supabase"
         "stripe/stripe-cli/stripe"
     )
