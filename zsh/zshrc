@@ -88,7 +88,7 @@ alias dpsa='docker ps -a'
 alias dlogs='docker logs -f'
 alias dexec='docker exec -it'
 
-# Tmux window naming for SSH and Claude Code
+# Tmux window naming for SSH, mosh, and Claude Code
 if [[ -n "$TMUX" ]]; then
   ssh() {
     local host="" skip_next=0
@@ -105,11 +105,42 @@ if [[ -n "$TMUX" ]]; then
     tmux set-window-option automatic-rename on
   }
 
+  mosh() {
+    local host="" skip_next=0
+    for arg in "$@"; do
+      if (( skip_next )); then skip_next=0; continue; fi
+      case "$arg" in
+        --ssh=*|--port=*|--predict=*|--family=*) ;;
+        --*) ;;
+        -*) skip_next=1 ;;
+        *) host="${arg#*@}"; break ;;
+      esac
+    done
+    [[ -n "$host" ]] && tmux rename-window "󰌘 ${host}"
+    command mosh "$@"
+    tmux set-window-option automatic-rename on
+  }
+
   claude() {
     tmux rename-window " claude"
     command claude "$@"
     tmux set-window-option automatic-rename on
   }
+
+  # Server-side: when a mosh client connects into this machine and zsh starts
+  # inside tmux, name the window after the hostname (mirrors SSH behaviour).
+  _is_mosh() {
+    local pid=$PPID
+    while [[ $pid -gt 1 ]]; do
+      local name=$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ')
+      [[ "$name" == "mosh-server" ]] && return 0
+      local ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+      [[ "$ppid" == "$pid" || -z "$ppid" ]] && break
+      pid=$ppid
+    done
+    return 1
+  }
+  _is_mosh && tmux rename-window "$(hostname -s)"
 fi
 
 # Auto-attach to tmux session when opening a terminal
