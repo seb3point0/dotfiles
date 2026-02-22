@@ -4,10 +4,10 @@ Personal dotfiles for macOS and Linux. Covers zsh, tmux, and Neovim.
 
 ## Install
 
-One-liner (curl bootstrap):
+One-liner (curl install):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/install.sh | bash
 ```
 
 Or manually:
@@ -32,8 +32,9 @@ The installer is idempotent — safe to re-run, skips anything already present.
 | Zsh plugins | zsh-autosuggestions, zsh-syntax-highlighting |
 | Powerlevel10k | Prompt theme |
 | Symlinks | `~/.zshrc`, `~/.p10k.zsh`, `~/.tmux.conf` → dotfiles repo |
-| Neovim plugins | All plugins via lazy.nvim (headless sync) |
+| Neovim config | Symlinked `~/.config/nvim`, all plugins via lazy.nvim (headless sync) |
 | TPM plugins | tmux-resurrect, tmux-continuum |
+| Default shell | Sets zsh as the default shell via `chsh` |
 
 ### Post-install
 
@@ -47,16 +48,17 @@ The installer is idempotent — safe to re-run, skips anything already present.
 
 ```
 .dotfiles/
-├── install.sh          # Full installer
-├── bootstrap.sh        # Minimal curl bootstrap
+├── install.sh          # Installer (also works as curl | bash bootstrap)
 ├── zsh/
 │   ├── zshrc           # Shell config → ~/.zshrc
 │   └── p10k.zsh        # Powerlevel10k config → ~/.p10k.zsh
 ├── tmux/
 │   ├── tmux.conf       # Tmux config → ~/.tmux.conf
 │   └── scripts/
-│       ├── battery.sh  # Battery % for status bar
-│       └── load.sh     # CPU load for status bar
+│       ├── battery.sh    # Battery % for status bar
+│       ├── load.sh       # CPU load for status bar
+│       ├── tailscale.sh  # Tailscale status for status bar
+│       └── uptime.sh     # System uptime for status bar
 └── nvim/               # Full Neovim config → ~/.config/nvim
     ├── init.lua
     └── lua/
@@ -178,7 +180,7 @@ Sessions auto-save every 15 minutes and auto-restore when tmux starts.
 
 ## Neovim
 
-**Leader:** `,`  |  93 plugins via [lazy.nvim](https://github.com/folke/lazy.nvim)  |  Run `:Lazy` to manage plugins.
+**Leader:** `,`  |  ~96 plugins via [lazy.nvim](https://github.com/folke/lazy.nvim)  |  Run `:Lazy` to manage plugins.
 
 The config is based on [jdhao/nvim-config](https://github.com/jdhao/nvim-config).
 
@@ -268,17 +270,27 @@ The config is based on [jdhao/nvim-config](https://github.com/jdhao/nvim-config)
 | nvim-treesitter | Syntax highlighting and text objects |
 | fzf-lua | Fuzzy finder — files, grep, buffers, LSP symbols |
 | telescope.nvim | Alternative fuzzy picker |
+| lualine | Status line |
+| bufferline | Buffer/tab line at the top |
 | gitsigns | Git change indicators in the gutter |
 | vim-fugitive | `:Git` — full git workflow inside Neovim |
 | neogit | Git UI (like Magit) |
+| diffview.nvim | Side-by-side diff viewer |
+| git-conflict.nvim | Conflict markers and resolution UI |
+| gitlinker | Generate shareable git permalinks |
+| glance.nvim | Peek LSP definitions / references in a popup |
 | which-key | Press `,` and pause to see all available bindings |
 | snacks.nvim | Notifications, scratch buffers, utilities |
+| fidget.nvim | LSP progress spinner in the corner |
 | nvim-ufo | Code folding with preview |
 | nvim-tree | File explorer sidebar |
+| dropbar.nvim | Breadcrumb navigation bar |
 | hop.nvim | EasyMotion-style jump to any character |
 | UltiSnips | Snippet engine — trigger with `C-j` |
+| yanky.nvim | Yank history ring — `:YankyRingHistory` |
 | vim-sandwich | Surround text objects with `sa`, `sd`, `sr` |
 | vim-matchup | Enhanced `%` matching |
+| vim-illuminate | Highlight other occurrences of word under cursor |
 | render-markdown | Rendered markdown preview in buffer |
 | lazydev.nvim | Lua type annotations for Neovim API |
 
