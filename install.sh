@@ -43,10 +43,22 @@ OS="$(uname -s)"
 # ============================================================================
 
 install_brew() {
+    # Remove leftover tap directories from previous failed installs before brew update runs.
+    # These cause `brew update --force` (called inside the Homebrew installer) to abort.
+    local tap_roots=(
+        "/home/linuxbrew/.linuxbrew/Homebrew/Library/Taps"
+        "/opt/homebrew/Library/Taps"
+        "/usr/local/Homebrew/Library/Taps"
+    )
+    for tap_root in "${tap_roots[@]}"; do
+        if [[ -d "$tap_root/scaleway" ]]; then
+            warn "Removing broken scaleway tap directory: $tap_root/scaleway"
+            rm -rf "$tap_root/scaleway"
+        fi
+    done
+
     if command -v brew &>/dev/null; then
         info "Homebrew already installed"
-        # Remove any taps with broken remotes so `brew update` doesn't fail
-        brew untap scaleway/tap 2>/dev/null && warn "Removed broken scaleway/tap (will reinstall)" || true
         return
     fi
 
@@ -101,6 +113,12 @@ install_brew_packages() {
 # ============================================================================
 
 install_tap_packages() {
+    # Third-party tap packages are macOS dev tools — skip on Linux servers
+    if [[ "$OS" != "Darwin" ]]; then
+        info "Skipping tap packages (Linux — dev tools not needed on servers)"
+        return
+    fi
+
     info "Installing tap packages..."
 
     # Format: "tap/formula" — brew installs the tap automatically
