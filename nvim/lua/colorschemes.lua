@@ -92,11 +92,19 @@ M.colorscheme_conf = {
   end,
 }
 
+--- Load a specific colorscheme by name.
+M.load_colorscheme = function(name)
+  local loader = M.colorscheme_conf[name]
+  if not loader then
+    vim.notify("Unknown colorscheme: " .. name, vim.log.levels.WARN)
+    return
+  end
+  loader()
+end
+
 --- Use a random colorscheme from the pre-defined list of colorschemes.
 M.rand_colorscheme = function()
   local colorscheme = utils.rand_element(vim.tbl_keys(M.colorscheme_conf))
-
-  -- Load the colorscheme and its settings
   M.colorscheme_conf[colorscheme]()
 end
 
