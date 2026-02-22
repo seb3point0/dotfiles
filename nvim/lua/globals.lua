@@ -9,6 +9,12 @@ vim.g.is_mac = utils.has("macunix") and true or false
 
 vim.g.logging_level = vim.log.levels.INFO
 
+-- Ensure Homebrew bin is in PATH on macOS (may be missing when launched from tmux)
+if vim.g.is_mac then
+  local homebrew_prefix = vim.fn.isdirectory("/opt/homebrew") == 1 and "/opt/homebrew" or "/usr/local"
+  vim.env.PATH = homebrew_prefix .. "/bin:" .. vim.env.PATH
+end
+
 ------------------------------------------------------------------------
 --                         builtin variables                          --
 ------------------------------------------------------------------------
