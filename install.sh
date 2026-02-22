@@ -304,6 +304,40 @@ setup_symlinks() {
 }
 
 # ============================================================================
+# Claude Code settings
+# ============================================================================
+
+install_claude_settings() {
+    local src="$DOTFILES_DIR/claude/settings.json"
+    local dst="$HOME/.claude/settings.json"
+
+    mkdir -p "$HOME/.claude"
+
+    if [[ ! -f "$dst" ]]; then
+        info "Creating Claude Code settings..."
+        cp "$src" "$dst"
+        success "Claude Code settings created"
+        return
+    fi
+
+    info "Merging Claude Code settings..."
+    local tmp
+    tmp=$(mktemp)
+    # Deep merge: union allow arrays, merge env keys, overwrite scalar settings
+    jq -s '
+        .[0] as $existing |
+        .[1] as $desired |
+        $existing |
+        .env = (($existing.env // {}) + ($desired.env // {})) |
+        .teammateMode = $desired.teammateMode |
+        .permissions.allow = (
+            ($existing.permissions.allow // []) + ($desired.permissions.allow // []) | unique
+        )
+    ' "$dst" "$src" > "$tmp" && mv "$tmp" "$dst"
+    success "Claude Code settings updated"
+}
+
+# ============================================================================
 # Default shell
 # ============================================================================
 
@@ -357,6 +391,7 @@ main() {
     install_tap_packages
     install_stripe
     install_claude_code
+    install_claude_settings
     install_ohmyzsh
     install_zsh_plugins
     install_powerlevel10k
