@@ -13,7 +13,7 @@ require("fzf-lua").setup {
     -- you can create a file `.rgignore` to "unignore" those files, e.g., `.env` files.
     -- see also https://github.com/BurntSushi/ripgrep/discussions/2512
     -- and https://www.reddit.com/r/linuxquestions/comments/zycvud/ripgrep_respect_gitignore_but_show_env_files/
-    no_ignore = false,
+    no_ignore = true,
   },
 }
 
