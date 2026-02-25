@@ -82,6 +82,9 @@ else
   alias l='ls -CF'
 fi
 
+# Claude Code
+alias claudex='claude --dangerously-skip-permissions --teammate-mode in-process'
+
 # Docker shortcuts
 alias dps='docker ps'
 alias dpsa='docker ps -a'
