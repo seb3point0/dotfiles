@@ -266,6 +266,15 @@ setup_nvim() {
         nvim --headless -c "lua require('lazy').sync({wait=true})" -c "qa" || \
             warn "nvim plugin sync returned non-zero — check :Lazy in nvim for details"
         success "nvim plugins installed"
+
+        if command -v tree-sitter &>/dev/null; then
+            info "Pre-installing tree-sitter parsers..."
+            nvim --headless -c "lua local ts = require('nvim-treesitter'); ts.install('all'):wait()" -c "qa" || \
+                warn "tree-sitter parser install returned non-zero — check :TSInstall in nvim for details"
+            success "tree-sitter parsers installed"
+        else
+            warn "tree-sitter CLI not found — skipping parser pre-install"
+        fi
     fi
 }
 
