@@ -92,6 +92,7 @@ install_brew_packages() {
         eza
         ripgrep
         node
+        tree-sitter-cli
         gh
         kubectl
         scw
