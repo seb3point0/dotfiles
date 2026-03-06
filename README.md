@@ -28,6 +28,8 @@ The installer is idempotent — safe to re-run, skips anything already present.
 | Brew packages | git, neovim, tmux, zsh, fzf, bat, eza, ripgrep, node, gh, kubectl |
 | Tap packages | scw (Scaleway), supabase, stripe |
 | Claude Code | `npm install -g @anthropic-ai/claude-code` |
+| OpenAI Codex CLI | `npm install -g @openai/codex` |
+| OpenCode | `brew install opencode-ai/tap/opencode` |
 | Oh My Zsh | Shell framework |
 | Zsh plugins | zsh-autosuggestions, zsh-syntax-highlighting |
 | Powerlevel10k | Prompt theme |

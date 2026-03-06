@@ -204,6 +204,24 @@ install_codex() {
 }
 
 # ============================================================================
+# OpenCode (Homebrew)
+# ============================================================================
+
+install_opencode() {
+    if brew list --formula opencode &>/dev/null; then
+        info "OpenCode already installed"
+        return
+    fi
+
+    info "Installing OpenCode via brew..."
+    if brew install opencode-ai/tap/opencode; then
+        success "OpenCode installed"
+    else
+        warn "OpenCode install failed (non-fatal, install manually if needed)"
+    fi
+}
+
+# ============================================================================
 # Oh My Zsh
 # ============================================================================
 
@@ -422,6 +440,7 @@ main() {
     install_stripe
     install_claude_code
     install_codex
+    install_opencode
     install_claude_settings
     install_ohmyzsh
     install_zsh_plugins
