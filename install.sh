@@ -184,6 +184,26 @@ install_claude_code() {
 }
 
 # ============================================================================
+# OpenAI Codex CLI (npm global)
+# ============================================================================
+
+install_codex() {
+    if command -v codex &>/dev/null; then
+        info "OpenAI Codex CLI already installed"
+        return
+    fi
+
+    if ! command -v npm &>/dev/null; then
+        warn "npm not found — skipping OpenAI Codex CLI install"
+        return
+    fi
+
+    info "Installing OpenAI Codex CLI..."
+    npm install -g @openai/codex
+    success "OpenAI Codex CLI installed"
+}
+
+# ============================================================================
 # Oh My Zsh
 # ============================================================================
 
@@ -401,6 +421,7 @@ main() {
     install_tap_packages
     install_stripe
     install_claude_code
+    install_codex
     install_claude_settings
     install_ohmyzsh
     install_zsh_plugins
