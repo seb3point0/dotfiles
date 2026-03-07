@@ -94,7 +94,9 @@ install_brew_packages() {
         node
         tree-sitter-cli
         gh
+        huggingface-cli
         kubectl
+        pyenv
         scw
     )
 
@@ -111,6 +113,34 @@ install_brew_packages() {
 }
 
 # ============================================================================
+# Python / pyenv
+# ============================================================================
+
+PYENV_PYTHON_VERSION="3.14.3"
+
+install_python_env() {
+    if ! command -v pyenv &>/dev/null; then
+        warn "pyenv not found - skipping Python environment setup"
+        return
+    fi
+
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)"
+
+    if pyenv versions --bare | grep -qx "$PYENV_PYTHON_VERSION"; then
+        info "Python $PYENV_PYTHON_VERSION already installed via pyenv"
+    else
+        info "Installing Python $PYENV_PYTHON_VERSION via pyenv..."
+        pyenv install "$PYENV_PYTHON_VERSION"
+    fi
+
+    pyenv global "$PYENV_PYTHON_VERSION"
+    pyenv rehash
+    success "Python $PYENV_PYTHON_VERSION ready via pyenv"
+}
+
+# ============================================================================
 # Tap packages (third-party brew taps)
 # ============================================================================
 
@@ -120,6 +150,7 @@ install_tap_packages() {
     # Format: "tap/formula" — brew installs the tap automatically
     # Note: scw is in homebrew-core, installed via install_brew_packages instead
     local tap_packages=(
+        "teamookla/speedtest/speedtest"
         "supabase/tap/supabase"
     )
 
@@ -344,6 +375,7 @@ symlink() {
 setup_symlinks() {
     info "Creating symlinks..."
     symlink "$DOTFILES_DIR/zsh/zshrc"    "$HOME/.zshrc"
+    symlink "$DOTFILES_DIR/zsh/zprofile" "$HOME/.zprofile"
     symlink "$DOTFILES_DIR/zsh/p10k.zsh" "$HOME/.p10k.zsh"
     symlink "$DOTFILES_DIR/tmux/tmux.conf" "$HOME/.tmux.conf"
 
@@ -436,6 +468,7 @@ main() {
 
     install_brew
     install_brew_packages
+    install_python_env
     install_tap_packages
     install_stripe
     install_claude_code

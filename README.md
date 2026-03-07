@@ -25,8 +25,9 @@ The installer is idempotent — safe to re-run, skips anything already present.
 | Step | What |
 |------|------|
 | Homebrew | Package manager |
-| Brew packages | git, neovim, tmux, zsh, fzf, bat, eza, ripgrep, node, gh, kubectl |
-| Tap packages | scw (Scaleway), supabase, stripe |
+| Brew packages | git, neovim, tmux, zsh, fzf, bat, eza, ripgrep, node, gh, huggingface-cli, kubectl, pyenv |
+| Python | Installs `pyenv`, Python `3.14.3`, and sets it as the global default |
+| Tap packages | scw (Scaleway), supabase, stripe, speedtest |
 | Claude Code | `npm install -g @anthropic-ai/claude-code` |
 | OpenAI Codex CLI | `npm install -g @openai/codex` |
 | OpenCode | `brew install opencode-ai/tap/opencode` |
@@ -53,6 +54,7 @@ The installer is idempotent — safe to re-run, skips anything already present.
 ├── install.sh          # Installer (also works as curl | bash bootstrap)
 ├── zsh/
 │   ├── zshrc           # Shell config → ~/.zshrc
+│   ├── zprofile        # Login shell config → ~/.zprofile
 │   └── p10k.zsh        # Powerlevel10k config → ~/.p10k.zsh
 ├── tmux/
 │   ├── tmux.conf       # Tmux config → ~/.tmux.conf
