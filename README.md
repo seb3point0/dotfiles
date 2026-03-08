@@ -175,6 +175,13 @@ Enter with `prefix + [`, exit with `q`.
 | `r` | Toggle rectangle selection |
 | `y` | Yank selection to system clipboard |
 
+#### Remote and nested tmux
+
+- Local tmux copy mode with `y` copies visible pane text to the local clipboard.
+- For remote apps or nested tmux sessions to copy directly to the local machine, use OSC52 passthrough.
+- On remote machines that also run tmux, enable `set -s set-clipboard on` and `set -g allow-passthrough on` there too.
+- In iTerm2, make sure terminal apps are allowed to access the clipboard so OSC52 is not blocked.
+
 ### Session persistence (tmux-resurrect / tmux-continuum)
 
 | Key | Action |

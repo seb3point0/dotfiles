@@ -36,7 +36,27 @@ success() { echo -e "${GREEN}[dotfiles]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[dotfiles]${NC} $*"; }
 fail()    { echo -e "${RED}[dotfiles]${NC} $*"; exit 1; }
 
+refresh_dotfiles_repo() {
+    if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
+        return
+    fi
+
+    if ! git -C "$DOTFILES_DIR" remote get-url origin &>/dev/null; then
+        warn "No git origin configured for $DOTFILES_DIR - skipping update check"
+        return
+    fi
+
+    info "Getting latest dotfiles commit from GitHub..."
+    git -C "$DOTFILES_DIR" pull --ff-only
+
+    local commit_info
+    commit_info="$(git -C "$DOTFILES_DIR" log -1 --date=short --format='%cd %h')"
+    info "Using dotfiles commit $commit_info"
+}
+
 OS="$(uname -s)"
+
+refresh_dotfiles_repo
 
 # ============================================================================
 # Homebrew
