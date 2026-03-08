@@ -92,6 +92,9 @@ if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
         echo "Cloning dotfiles to $_dotfiles..."
         git clone "$_repo" "$_dotfiles"
     fi
+    if [[ -r /dev/tty ]]; then
+        exec bash "$_dotfiles/install.sh" "$@" </dev/tty >/dev/tty 2>&1
+    fi
     exec bash "$_dotfiles/install.sh" "$@"
 fi
 
@@ -412,6 +415,74 @@ installer_numbered_choice() {
     done
 }
 
+install_linux_packages() {
+    local packages=("$@")
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        return
+    fi
+
+    if command -v apt-get >/dev/null 2>&1; then
+        bootstrap_info "Installing packages with apt: ${packages[*]}"
+        DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y "${packages[@]}"
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y "${packages[@]}"
+    elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache "${packages[@]}"
+    elif command -v pacman >/dev/null 2>&1; then
+        pacman -Sy --noconfirm "${packages[@]}"
+    elif command -v zypper >/dev/null 2>&1; then
+        zypper --non-interactive install "${packages[@]}"
+    else
+        warn "No supported Linux package manager found for: ${packages[*]}"
+    fi
+}
+
+install_category_packages() {
+    local linux_packages=()
+    local brew_packages=()
+    local token
+
+    for token in "$@"; do
+        case "$token" in
+            git|zsh|tmux|neovim|node|gh|jq|kubectl|ripgrep|fzf)
+                linux_packages+=("$token")
+                ;;
+            tree-sitter-cli)
+                linux_packages+=(tree-sitter-cli)
+                ;;
+            eza)
+                linux_packages+=(eza)
+                ;;
+            bat)
+                linux_packages+=(bat)
+                ;;
+            pyenv)
+                brew_packages+=(pyenv)
+                ;;
+            huggingface-cli|scw)
+                brew_packages+=("$token")
+                ;;
+            *)
+                brew_packages+=("$token")
+                ;;
+        esac
+    done
+
+    if [[ "$OS" == "Linux" ]]; then
+        install_linux_packages "${linux_packages[@]}"
+        if [[ ${#brew_packages[@]} -gt 0 ]]; then
+            install_brew
+            install_brew_packages "${brew_packages[@]}"
+        fi
+    else
+        install_brew
+        install_brew_packages "$@"
+    fi
+}
+
 installer_menu_select() {
     local title subtitle default_choice selected_key key escape_sequence
     title="$1"
@@ -472,6 +543,70 @@ installer_menu_select() {
                     printf '%s\n' "$key"
                     return
                 fi
+                ;;
+        esac
+    done
+}
+
+installer_multiselect() {
+    local title subtitle
+    title="$1"
+    subtitle="$2"
+    shift 2
+    local options=("$@")
+    local selected_index=0
+    local selected_csv="${INSTALLER_SELECTED:-$(installer_all_categories_csv)}"
+    local key escape_sequence i value label detail marker prefix
+
+    if ! installer_supports_advanced_input; then
+        printf '%s\n' "$selected_csv"
+        return
+    fi
+
+    while true; do
+        printf '\033[2J\033[H' >&2
+        render_header "$title" "$subtitle" >&2
+
+        for i in "${!options[@]}"; do
+            IFS='|' read -r value label detail <<< "${options[$i]}"
+            if installer_selected_has_category "$selected_csv" "$value"; then
+                prefix="x"
+            else
+                prefix=" "
+            fi
+            marker=""
+            if (( i == selected_index )); then
+                marker="<"
+            fi
+            render_menu_row "$prefix" "$label" "$detail" "$marker" >&2
+        done
+
+        printf '%bUse arrow keys or j/k to move, space to toggle, Enter to continue.%b\n' "$THEME_MUTED" "$THEME_RESET" >&2
+
+        read -rsn1 key
+        case "$key" in
+            ' ')
+                IFS='|' read -r value _ <<< "${options[$selected_index]}"
+                INSTALLER_SELECTED="$selected_csv"
+                toggle_category "$value"
+                selected_csv="$INSTALLER_SELECTED"
+                ;;
+            $'\n'|$'\r')
+                printf '%s\n' "$selected_csv"
+                return
+                ;;
+            k)
+                selected_index=$(((selected_index - 1 + ${#options[@]}) % ${#options[@]}))
+                ;;
+            j)
+                selected_index=$(((selected_index + 1) % ${#options[@]}))
+                ;;
+            $'\033')
+                read -rsn2 escape_sequence || true
+                case "$escape_sequence" in
+                    '[A') selected_index=$(((selected_index - 1 + ${#options[@]}) % ${#options[@]})) ;;
+                    '[B') selected_index=$(((selected_index + 1) % ${#options[@]})) ;;
+                esac
                 ;;
         esac
     done
@@ -729,6 +864,21 @@ show_category_checklist() {
 
     if [[ -z "$INSTALLER_SELECTED" ]]; then
         select_default_categories
+    fi
+
+    if installer_supports_advanced_input; then
+        INSTALLER_SELECTED="$(installer_multiselect \
+            "Choose categories" \
+            "Use arrows or j/k to move, space to toggle, Enter to continue." \
+            "zsh|$(installer_category_label zsh)|zsh" \
+            "tmux|$(installer_category_label tmux)|tmux" \
+            "neovim|$(installer_category_label neovim)|neovim" \
+            "python|$(installer_category_label python)|python" \
+            "node|$(installer_category_label node)|node" \
+            "ai|$(installer_category_label ai)|ai" \
+            "terminal|$(installer_category_label terminal)|terminal" \
+            "developer|$(installer_category_label developer)|developer")"
+        return
     fi
 
     while true; do
@@ -1055,6 +1205,7 @@ install_tap_packages() {
 # ============================================================================
 
 install_stripe() {
+    local root_prefix=""
     step "Checking Stripe CLI"
     if command -v stripe &>/dev/null; then
         info "Stripe CLI already installed"
@@ -1065,14 +1216,17 @@ install_stripe() {
         info "Installing Stripe CLI via brew..."
         brew install stripe/stripe-cli/stripe || warn "Stripe CLI install failed (non-fatal, install manually if needed)"
     else
+        if [[ ${EUID:-$(id -u)} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
+            root_prefix="sudo "
+        fi
         info "Installing Stripe CLI via apt..."
         curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public \
             | gpg --dearmor \
-            | sudo tee /usr/share/keyrings/stripe.gpg >/dev/null
+            | ${root_prefix}tee /usr/share/keyrings/stripe.gpg >/dev/null
         echo "deb [signed-by=/usr/share/keyrings/stripe.gpg] https://packages.stripe.dev/stripe-cli-debian-local stable main" \
-            | sudo tee /etc/apt/sources.list.d/stripe.list >/dev/null
-        sudo apt update -qq
-        sudo apt install -y stripe || warn "Stripe CLI install failed (non-fatal, install manually if needed)"
+            | ${root_prefix}tee /etc/apt/sources.list.d/stripe.list >/dev/null
+        ${root_prefix}apt-get update -qq
+        ${root_prefix}apt-get install -y stripe || warn "Stripe CLI install failed (non-fatal, install manually if needed)"
     fi
 
     success "Stripe CLI installed"
@@ -1236,6 +1390,7 @@ install_nerd_font() {
 
 setup_nvim() {
     local nvim_target="$HOME/.config/nvim"
+    local nvim_locale="${LANG:-C.UTF-8}"
 
     if [[ -L "$nvim_target" ]]; then
         local current_link
@@ -1257,15 +1412,19 @@ setup_nvim() {
 
     if command -v nvim &>/dev/null; then
         info "Installing nvim plugins (headless)..."
-        nvim --headless -c "lua require('lazy').sync({wait=true})" -c "qa" || \
+        if LANG="$nvim_locale" LC_ALL="$nvim_locale" nvim --headless -c "lua require('lazy').sync({wait=true})" -c "qa"; then
+            success "nvim plugins installed"
+        else
             warn "nvim plugin sync returned non-zero — check :Lazy in nvim for details"
-        success "nvim plugins installed"
+        fi
 
         if command -v tree-sitter &>/dev/null; then
             info "Pre-installing tree-sitter parsers..."
-            nvim --headless -c "lua local ts = require('nvim-treesitter'); ts.install('all'):wait()" -c "qa" || \
+            if LANG="$nvim_locale" LC_ALL="$nvim_locale" nvim --headless -c "lua local ts = require('nvim-treesitter'); ts.install('all'):wait()" -c "qa"; then
+                success "tree-sitter parsers installed"
+            else
                 warn "tree-sitter parser install returned non-zero — check :TSInstall in nvim for details"
-            success "tree-sitter parsers installed"
+            fi
         else
             warn "tree-sitter CLI not found — skipping parser pre-install"
         fi
@@ -1361,8 +1520,9 @@ install_claude_settings() {
 # ============================================================================
 
 set_default_shell() {
-    local zsh_path
+    local zsh_path login_user root_prefix=""
     zsh_path="$(command -v zsh)"
+    login_user="${USER:-$(id -un)}"
 
     if [[ -z "$zsh_path" ]]; then
         warn "zsh not found — skipping shell change"
@@ -1371,9 +1531,9 @@ set_default_shell() {
 
     local current_shell
     if [[ "$OS" == "Darwin" ]]; then
-        current_shell=$(dscl . -read /Users/"$USER" UserShell | awk '{print $2}')
+        current_shell=$(dscl . -read /Users/"$login_user" UserShell | awk '{print $2}')
     else
-        current_shell=$(getent passwd "$USER" | cut -d: -f7)
+        current_shell=$(getent passwd "$login_user" | cut -d: -f7)
     fi
 
     if [[ "$current_shell" == *zsh* ]]; then
@@ -1383,13 +1543,23 @@ set_default_shell() {
 
     # Make sure our zsh is in /etc/shells
     if ! grep -qxF "$zsh_path" /etc/shells 2>/dev/null; then
-        info "Adding $zsh_path to /etc/shells (needs sudo)..."
-        echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+        if [[ ${EUID:-$(id -u)} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
+            root_prefix="sudo "
+        fi
+        info "Adding $zsh_path to /etc/shells..."
+        echo "$zsh_path" | ${root_prefix}tee -a /etc/shells >/dev/null
     fi
 
-    info "Changing default shell to zsh (needs password)..."
-    chsh -s "$zsh_path"
-    success "Default shell set to zsh — log out and back in to take effect"
+    if command -v chsh >/dev/null 2>&1; then
+        info "Changing default shell to zsh..."
+        if chsh -s "$zsh_path" "$login_user"; then
+            success "Default shell set to zsh — log out and back in to take effect"
+        else
+            warn "Unable to change default shell automatically"
+        fi
+    else
+        warn "chsh not available — skipping default shell change"
+    fi
 }
 
 # ============================================================================
@@ -1398,8 +1568,7 @@ set_default_shell() {
 
 install_zsh_category() {
     section "Zsh and shell defaults"
-    install_brew
-    install_brew_packages zsh git
+    install_category_packages zsh git
     install_ohmyzsh
     install_zsh_plugins
     install_powerlevel10k
@@ -1410,35 +1579,30 @@ install_zsh_category() {
 
 install_tmux_category() {
     section "Tmux terminal multiplexer"
-    install_brew
-    install_brew_packages tmux
+    install_category_packages tmux
     setup_tmux_symlinks
 }
 
 install_neovim_category() {
     section "Neovim editor setup"
-    install_brew
-    install_brew_packages neovim tree-sitter-cli
+    install_category_packages neovim tree-sitter-cli
     setup_nvim
 }
 
 install_python_category() {
     section "Python via pyenv"
-    install_brew
-    install_brew_packages pyenv
+    install_category_packages pyenv
     install_python_env
 }
 
 install_node_category() {
     section "Node.js tooling"
-    install_brew
-    install_brew_packages node
+    install_category_packages node
 }
 
 install_ai_category() {
     section "AI coding tools"
-    install_brew
-    install_brew_packages node huggingface-cli
+    install_category_packages node huggingface-cli
     install_claude_code
     install_codex
     install_opencode
@@ -1446,16 +1610,14 @@ install_ai_category() {
 
 install_terminal_category() {
     section "Terminal utilities"
-    install_brew
-    install_brew_packages fzf bat eza ripgrep
+    install_category_packages fzf bat eza ripgrep
     install_tap_packages teamookla/speedtest/speedtest
     install_stripe
 }
 
 install_developer_category() {
     section "Developer CLI tools"
-    install_brew
-    install_brew_packages git gh jq kubectl scw
+    install_category_packages git gh jq kubectl scw
     install_tap_packages supabase/tap/supabase
     install_claude_settings
     ensure_git_identity
