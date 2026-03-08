@@ -162,3 +162,6 @@ fi
 # Machine-specific overrides (paths, env vars, secrets, etc.)
 # This file is not tracked by git — create it with anything local to this machine.
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+
+# opencode
+export PATH=/Users/seb3point0/.opencode/bin:$PATH
