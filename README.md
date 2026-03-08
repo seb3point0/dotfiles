@@ -30,9 +30,9 @@ Before first launch, note that the zsh and tmux configs use Nerd Font glyphs. On
 | Brew packages | git, neovim, tmux, zsh, fzf, bat, eza, ripgrep, node, gh, huggingface-cli, kubectl, pyenv |
 | Python | Installs `pyenv`, Python `3.14.3`, and sets it as the global default |
 | Tap packages | scw (Scaleway), supabase, stripe, speedtest |
-| Claude Code | `npm install -g @anthropic-ai/claude-code` |
+| Claude Code | `curl -fsSL https://claude.ai/install.sh | bash` |
 | OpenAI Codex CLI | `npm install -g @openai/codex` |
-| OpenCode | `brew install opencode-ai/tap/opencode` |
+| OpenCode | `curl -fsSL https://opencode.ai/install | bash` |
 | Oh My Zsh | Shell framework |
 | Zsh plugins | zsh-autosuggestions, zsh-syntax-highlighting |
 | Powerlevel10k | Prompt theme |

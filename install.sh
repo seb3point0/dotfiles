@@ -195,7 +195,7 @@ install_stripe() {
 }
 
 # ============================================================================
-# Claude Code (npm global)
+# Claude Code (official install script)
 # ============================================================================
 
 install_claude_code() {
@@ -204,14 +204,17 @@ install_claude_code() {
         return
     fi
 
-    if ! command -v npm &>/dev/null; then
-        warn "npm not found — skipping Claude Code install"
+    if ! command -v curl &>/dev/null; then
+        warn "curl not found — skipping Claude Code install"
         return
     fi
 
-    info "Installing Claude Code..."
-    npm install -g @anthropic-ai/claude-code
-    success "Claude Code installed"
+    info "Installing Claude Code via official install script..."
+    if curl -fsSL https://claude.ai/install.sh | bash; then
+        success "Claude Code installed"
+    else
+        warn "Claude Code install failed (non-fatal, install manually if needed)"
+    fi
 }
 
 # ============================================================================
@@ -235,17 +238,22 @@ install_codex() {
 }
 
 # ============================================================================
-# OpenCode (Homebrew)
+# OpenCode (official install script)
 # ============================================================================
 
 install_opencode() {
-    if brew list --formula opencode &>/dev/null; then
+    if command -v opencode &>/dev/null || [[ -x "$HOME/.opencode/bin/opencode" ]]; then
         info "OpenCode already installed"
         return
     fi
 
-    info "Installing OpenCode via brew..."
-    if brew install opencode-ai/tap/opencode; then
+    if ! command -v curl &>/dev/null; then
+        warn "curl not found — skipping OpenCode install"
+        return
+    fi
+
+    info "Installing OpenCode via official install script..."
+    if curl -fsSL https://opencode.ai/install | bash; then
         success "OpenCode installed"
     else
         warn "OpenCode install failed (non-fatal, install manually if needed)"

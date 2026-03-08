@@ -184,3 +184,6 @@ fi
 
 # opencode
 [[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
+
+# opencode
+export PATH=/home/seb3point0/.opencode/bin:$PATH
