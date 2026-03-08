@@ -162,6 +162,25 @@ fi
 # Machine-specific overrides (paths, env vars, secrets, etc.)
 # This file is not tracked by git — create it with anything local to this machine.
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+[[ -d "$HOME/.flutter-sdk/bin" ]] && export PATH="$HOME/.flutter-sdk/bin:$PATH"
+
+# bun completions
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+# bun
+if [[ -d "$HOME/.bun/bin" ]]; then
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+fi
+
+# bun
+if [[ -d "/tmp/bun-install/bin" ]]; then
+  export BUN_INSTALL="/tmp/bun-install"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+fi
+
+# OpenClaw Completion
+[ -s "$HOME/.openclaw/completions/openclaw.zsh" ] && source "$HOME/.openclaw/completions/openclaw.zsh"
 
 # opencode
-export PATH=/Users/seb3point0/.opencode/bin:$PATH
+[[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
