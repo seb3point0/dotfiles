@@ -156,6 +156,52 @@ installer_use_gum() {
     installer_has_interactive_terminal && installer_has_gum
 }
 
+gum_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64) printf '%s\n' x86_64 ;;
+        arm64|aarch64) printf '%s\n' arm64 ;;
+        *) return 1 ;;
+    esac
+}
+
+install_gum_from_github() {
+    local version arch tmpdir archive_name download_url bin_path target_bin
+    version="0.14.5"
+    arch="$(gum_arch)" || return 1
+    tmpdir="$(mktemp -d)"
+    archive_name="gum_${version}_Linux_${arch}.tar.gz"
+    download_url="https://github.com/charmbracelet/gum/releases/download/v${version}/${archive_name}"
+    target_bin="/usr/local/bin/gum"
+
+    if ! command -v curl >/dev/null 2>&1; then
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
+    if ! curl -fsSL "$download_url" -o "$tmpdir/$archive_name"; then
+        rm -rf "$tmpdir"
+        return 1
+    fi
+
+    tar -xzf "$tmpdir/$archive_name" -C "$tmpdir" || {
+        rm -rf "$tmpdir"
+        return 1
+    }
+
+    bin_path="$tmpdir/gum_${version}_Linux_${arch}/gum"
+    [[ -x "$bin_path" ]] || {
+        rm -rf "$tmpdir"
+        return 1
+    }
+
+    install -m 0755 "$bin_path" "$target_bin" || {
+        rm -rf "$tmpdir"
+        return 1
+    }
+
+    rm -rf "$tmpdir"
+}
+
 ensure_gum() {
     if installer_has_gum; then
         return
@@ -168,22 +214,20 @@ ensure_gum() {
         if command -v apt-get >/dev/null 2>&1; then
             DEBIAN_FRONTEND=noninteractive apt-get update || true
             if ! DEBIAN_FRONTEND=noninteractive apt-get install -y gum; then
-                install_brew
-                install_brew_packages gum
+                install_gum_from_github || true
             fi
         elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y gum || { install_brew; install_brew_packages gum; }
+            dnf install -y gum || install_gum_from_github || true
         elif command -v yum >/dev/null 2>&1; then
-            yum install -y gum || { install_brew; install_brew_packages gum; }
+            yum install -y gum || install_gum_from_github || true
         elif command -v apk >/dev/null 2>&1; then
-            apk add --no-cache gum || { install_brew; install_brew_packages gum; }
+            apk add --no-cache gum || install_gum_from_github || true
         elif command -v pacman >/dev/null 2>&1; then
-            pacman -Sy --noconfirm gum || { install_brew; install_brew_packages gum; }
+            pacman -Sy --noconfirm gum || install_gum_from_github || true
         elif command -v zypper >/dev/null 2>&1; then
-            zypper --non-interactive install gum || { install_brew; install_brew_packages gum; }
+            zypper --non-interactive install gum || install_gum_from_github || true
         else
-            install_brew
-            install_brew_packages gum
+            install_gum_from_github || true
         fi
     fi
 
