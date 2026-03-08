@@ -35,6 +35,18 @@ info()    { echo -e "${CYAN}[dotfiles]${NC} $*"; }
 success() { echo -e "${GREEN}[dotfiles]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[dotfiles]${NC} $*"; }
 fail()    { echo -e "${RED}[dotfiles]${NC} $*"; exit 1; }
+section() {
+    echo
+    echo -e "${CYAN}==>${NC} $*"
+}
+step()    { echo -e "${CYAN}  ->${NC} $*"; }
+summary() {
+    echo
+    echo -e "${CYAN}Summary:${NC}"
+    for item in "$@"; do
+        echo "  - $item"
+    done
+}
 
 refresh_dotfiles_repo() {
     if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
@@ -54,6 +66,53 @@ refresh_dotfiles_repo() {
     info "Using dotfiles commit $commit_info"
 }
 
+ensure_git_identity() {
+    if ! command -v git &>/dev/null; then
+        warn "git not found - skipping Git identity check"
+        return
+    fi
+
+    local git_name git_email
+    git_name="$(git config --global --get user.name || true)"
+    git_email="$(git config --global --get user.email || true)"
+
+    if [[ -n "$git_name" && -n "$git_email" ]]; then
+        info "Git identity already set: $git_name <$git_email>"
+        return
+    fi
+
+    if [[ ! -t 0 ]]; then
+        warn "Git user.name or user.email is missing - run 'git config --global' after install"
+        return
+    fi
+
+    section "Git identity"
+
+    if [[ -z "$git_name" ]]; then
+        read -r -p "  Git user.name: " git_name
+        if [[ -n "$git_name" ]]; then
+            git config --global user.name "$git_name"
+            success "Set git user.name to '$git_name'"
+        else
+            warn "Skipped git user.name"
+        fi
+    else
+        info "Git user.name already set: $git_name"
+    fi
+
+    if [[ -z "$git_email" ]]; then
+        read -r -p "  Git user.email: " git_email
+        if [[ -n "$git_email" ]]; then
+            git config --global user.email "$git_email"
+            success "Set git user.email to '$git_email'"
+        else
+            warn "Skipped git user.email"
+        fi
+    else
+        info "Git user.email already set: $git_email"
+    fi
+}
+
 OS="$(uname -s)"
 
 refresh_dotfiles_repo
@@ -63,6 +122,7 @@ refresh_dotfiles_repo
 # ============================================================================
 
 install_brew() {
+    step "Checking Homebrew"
     # Remove leftover tap directories from previous failed installs before brew update runs.
     # These cause `brew update --force` (called inside the Homebrew installer) to abort.
     local tap_roots=(
@@ -100,7 +160,7 @@ install_brew() {
 # ============================================================================
 
 install_brew_packages() {
-    info "Installing brew packages..."
+    step "Installing brew packages"
 
     local packages=(
         git
@@ -139,6 +199,7 @@ install_brew_packages() {
 PYENV_PYTHON_VERSION="3.14.3"
 
 install_python_env() {
+    step "Preparing Python environment"
     if ! command -v pyenv &>/dev/null; then
         warn "pyenv not found - skipping Python environment setup"
         return
@@ -165,7 +226,7 @@ install_python_env() {
 # ============================================================================
 
 install_tap_packages() {
-    info "Installing tap packages..."
+    step "Installing tap packages"
 
     # Format: "tap/formula" — brew installs the tap automatically
     # Note: scw is in homebrew-core, installed via install_brew_packages instead
@@ -192,6 +253,7 @@ install_tap_packages() {
 # ============================================================================
 
 install_stripe() {
+    step "Checking Stripe CLI"
     if command -v stripe &>/dev/null; then
         info "Stripe CLI already installed"
         return
@@ -219,6 +281,7 @@ install_stripe() {
 # ============================================================================
 
 install_claude_code() {
+    step "Checking Claude Code"
     if command -v claude &>/dev/null; then
         info "Claude Code already installed"
         return
@@ -242,6 +305,7 @@ install_claude_code() {
 # ============================================================================
 
 install_codex() {
+    step "Checking OpenAI Codex CLI"
     if command -v codex &>/dev/null; then
         info "OpenAI Codex CLI already installed"
         return
@@ -262,6 +326,7 @@ install_codex() {
 # ============================================================================
 
 install_opencode() {
+    step "Checking OpenCode"
     if command -v opencode &>/dev/null || [[ -x "$HOME/.opencode/bin/opencode" ]]; then
         info "OpenCode already installed"
         return
@@ -524,6 +589,7 @@ main() {
     echo -e "  Dotfiles: $DOTFILES_DIR"
     echo
 
+    section "Core tooling"
     install_brew
     install_brew_packages
     install_python_env
@@ -532,6 +598,10 @@ main() {
     install_claude_code
     install_codex
     install_opencode
+
+    ensure_git_identity
+
+    section "Shell and editor setup"
     install_claude_settings
     install_ohmyzsh
     install_zsh_plugins
@@ -543,13 +613,11 @@ main() {
 
     echo
     success "All done!"
-    echo
-    echo -e "${CYAN}Notes:${NC}"
-    echo "  - Machine-specific config goes in ~/.zshrc.local"
-    echo "  - Run 'p10k configure' to customize your prompt"
-    echo "  - Open nvim and run :Lazy to check plugin status"
-    echo "  - Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)"
-    echo
+    summary \
+        "Machine-specific config goes in ~/.zshrc.local" \
+        "Run 'p10k configure' to customize your prompt" \
+        "Open nvim and run :Lazy to check plugin status" \
+        "Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)"
 }
 
 if [[ -z "${INSTALLER_TEST_MODE:-}" ]]; then
