@@ -104,6 +104,7 @@ INSTALLER_MODE="${INSTALLER_MODE:-}"
 INSTALLER_THEME="${INSTALLER_THEME:-}"
 INSTALLER_SELECTED="${INSTALLER_SELECTED:-}"
 INSTALLER_FIRST_RUN="${INSTALLER_FIRST_RUN:-1}"
+INSTALLER_GUM_ENABLED="${INSTALLER_GUM_ENABLED:-}"
 
 installer_categories() {
     cat <<'EOF'
@@ -144,6 +145,49 @@ installer_category_tools() {
         developer) printf '%s\n' git gh jq kubectl scw supabase claude-settings ;;
         *) return 1 ;;
     esac
+}
+
+installer_has_gum() {
+    command -v gum >/dev/null 2>&1
+}
+
+installer_use_gum() {
+    [[ -n "$INSTALLER_GUM_ENABLED" ]] && return 0
+    installer_has_interactive_terminal && installer_has_gum
+}
+
+ensure_gum() {
+    if installer_has_gum; then
+        return
+    fi
+
+    if [[ "$OS" == "Darwin" ]]; then
+        install_brew
+        install_brew_packages gum
+    else
+        if command -v apt-get >/dev/null 2>&1; then
+            DEBIAN_FRONTEND=noninteractive apt-get update || true
+            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y gum; then
+                install_brew
+                install_brew_packages gum
+            fi
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y gum || { install_brew; install_brew_packages gum; }
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y gum || { install_brew; install_brew_packages gum; }
+        elif command -v apk >/dev/null 2>&1; then
+            apk add --no-cache gum || { install_brew; install_brew_packages gum; }
+        elif command -v pacman >/dev/null 2>&1; then
+            pacman -Sy --noconfirm gum || { install_brew; install_brew_packages gum; }
+        elif command -v zypper >/dev/null 2>&1; then
+            zypper --non-interactive install gum || { install_brew; install_brew_packages gum; }
+        else
+            install_brew
+            install_brew_packages gum
+        fi
+    fi
+
+    installer_has_gum || warn "gum install failed - falling back to plain shell UI"
 }
 
 save_installer_state() {
@@ -383,6 +427,132 @@ render_menu_row() {
         printf ' %b%s%b' "$THEME_SUCCESS" "$marker" "$THEME_RESET"
     fi
     printf '\n'
+}
+
+gum_theme_foreground() {
+    case "${INSTALLER_THEME:-opencode}" in
+        amber) printf '%s\n' '#ff9d00' ;;
+        mono) printf '%s\n' '#f5f5f5' ;;
+        *) printf '%s\n' '#00d7ff' ;;
+    esac
+}
+
+gum_theme_muted() {
+    case "${INSTALLER_THEME:-opencode}" in
+        amber) printf '%s\n' '#a6a6a6' ;;
+        mono) printf '%s\n' '#9a9a9a' ;;
+        *) printf '%s\n' '#8a8f98' ;;
+    esac
+}
+
+gum_theme_success() {
+    case "${INSTALLER_THEME:-opencode}" in
+        amber) printf '%s\n' '#d6b86a' ;;
+        mono) printf '%s\n' '#cfcfcf' ;;
+        *) printf '%s\n' '#33d17a' ;;
+    esac
+}
+
+gum_header() {
+    local title subtitle
+    title="$1"
+    subtitle="${2:-}"
+    if installer_use_gum; then
+        gum style --foreground "$(gum_theme_foreground)" --bold "$title"
+        if [[ -n "$subtitle" ]]; then
+            gum style --foreground "$(gum_theme_muted)" "$subtitle"
+        fi
+        return
+    fi
+    render_header "$title" "$subtitle"
+}
+
+gum_select_theme() {
+    local choice
+    if installer_use_gum; then
+        gum_header "dotfiles setup" "Choose a theme"
+        choice="$(printf '%s\n' opencode amber mono | gum choose --header "Theme" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)")"
+        set_theme "$choice"
+        return
+    fi
+    show_theme_picker
+}
+
+gum_select_existing_mode() {
+    local choice
+    if installer_use_gum; then
+        gum_header "dotfiles setup" "Choose how to continue"
+        choice="$(printf '%s\n' update reconfigure theme exit | gum choose --header "Existing install" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)")"
+        case "$choice" in
+            update|reconfigure) INSTALLER_MODE="$choice" ;;
+            theme) gum_select_theme; INSTALLER_MODE="menu" ;;
+            exit) exit 0 ;;
+        esac
+        return
+    fi
+    show_existing_install_menu
+}
+
+gum_select_categories() {
+    local selected=() line csv
+    if installer_use_gum; then
+        gum_header "Select bundles" "Space toggles, Enter continues"
+        while IFS= read -r line; do
+            selected+=("$line")
+        done < <(
+            printf '%s\n' \
+                "zsh - $(installer_category_label zsh)" \
+                "tmux - $(installer_category_label tmux)" \
+                "neovim - $(installer_category_label neovim)" \
+                "python - $(installer_category_label python)" \
+                "node - $(installer_category_label node)" \
+                "ai - $(installer_category_label ai)" \
+                "terminal - $(installer_category_label terminal)" \
+                "developer - $(installer_category_label developer)" \
+                | gum choose --no-limit --header "Categories" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)"
+        )
+        if [[ ${#selected[@]} -eq 0 ]]; then
+            csv="$(installer_all_categories_csv)"
+        else
+            csv="$(printf '%s\n' "${selected[@]}" | sed 's/ - .*//' | paste -sd, -)"
+        fi
+        printf '%s\n' "$csv"
+        return
+    fi
+    installer_multiselect "$@"
+}
+
+gum_review_selection() {
+    local category body="" 
+    if installer_use_gum; then
+        while IFS= read -r category; do
+            installer_selected_has_category "$INSTALLER_SELECTED" "$category" || continue
+            body+="$(installer_category_label "$category") (${category})\n"
+            body+="  $(installer_category_tools "$category" | paste -sd, -)\n\n"
+        done < <(installer_categories)
+        gum style --border normal --border-foreground "$(gum_theme_foreground)" --padding "1 2" --margin "1 0" --width 80 "$body"
+        return
+    fi
+    show_review_screen
+}
+
+gum_confirm_install() {
+    if installer_use_gum; then
+        gum confirm "Start install?"
+        return
+    fi
+    return 0
+}
+
+run_with_gum_spinner() {
+    local title
+    title="$1"
+    shift
+    if installer_use_gum; then
+        gum spin --spinner dot --title "$title" -- "$@"
+        return
+    fi
+    "$@"
 }
 
 installer_has_interactive_terminal() {
@@ -625,6 +795,10 @@ choose_default_mode() {
 }
 
 show_existing_install_menu() {
+    if installer_use_gum; then
+        gum_select_existing_mode
+        return
+    fi
     local selection
     selection="$(installer_menu_select \
         "dotfiles installer" \
@@ -646,6 +820,10 @@ show_existing_install_menu() {
 }
 
 show_theme_picker() {
+    if installer_use_gum; then
+        gum_select_theme
+        return
+    fi
     local selection
     selection="$(installer_menu_select \
         "Choose a theme" \
@@ -704,6 +882,10 @@ show_category_details() {
 }
 
 show_review_screen() {
+    if installer_use_gum; then
+        gum_review_selection
+        return
+    fi
     local category label
 
     render_header "Review selections" "Check the categories queued for install."
@@ -864,6 +1046,11 @@ show_category_checklist() {
 
     if [[ -z "$INSTALLER_SELECTED" ]]; then
         select_default_categories
+    fi
+
+    if installer_use_gum; then
+        INSTALLER_SELECTED="$(gum_select_categories)"
+        return
     fi
 
     if installer_supports_advanced_input; then
@@ -1640,14 +1827,14 @@ run_selected_categories() {
         render_execution_screen "$selected_csv"
 
         if case "$category" in
-            zsh) install_zsh_category ;;
-            tmux) install_tmux_category ;;
-            neovim) install_neovim_category ;;
-            python) install_python_category ;;
-            node) install_node_category ;;
-            ai) install_ai_category ;;
-            terminal) install_terminal_category ;;
-            developer) install_developer_category ;;
+            zsh) run_with_gum_spinner "Installing $(installer_category_label zsh)" install_zsh_category ;;
+            tmux) run_with_gum_spinner "Installing $(installer_category_label tmux)" install_tmux_category ;;
+            neovim) run_with_gum_spinner "Installing $(installer_category_label neovim)" install_neovim_category ;;
+            python) run_with_gum_spinner "Installing $(installer_category_label python)" install_python_category ;;
+            node) run_with_gum_spinner "Installing $(installer_category_label node)" install_node_category ;;
+            ai) run_with_gum_spinner "Installing $(installer_category_label ai)" install_ai_category ;;
+            terminal) run_with_gum_spinner "Installing $(installer_category_label terminal)" install_terminal_category ;;
+            developer) run_with_gum_spinner "Installing $(installer_category_label developer)" install_developer_category ;;
             *) fail "Unknown category: $category" ;;
         esac; then
             mark_task_state "$category" done
@@ -1668,6 +1855,10 @@ run_selected_categories() {
 
 main() {
     choose_default_mode
+
+    if installer_has_interactive_terminal; then
+        ensure_gum || true
+    fi
 
     if [[ "$INSTALLER_MODE" == "menu" ]]; then
         show_existing_install_menu
@@ -1691,6 +1882,7 @@ main() {
         echo
         show_review_screen
         echo
+        gum_confirm_install || exit 0
     fi
 
     run_selected_categories "$INSTALLER_SELECTED"
