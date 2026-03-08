@@ -20,6 +20,55 @@ cd ~/.dotfiles
 
 The installer is idempotent — safe to re-run, skips anything already present.
 
+### Installer wizard
+
+On a first run, `./install.sh` opens a guided wizard that:
+
+- picks a theme (`opencode`, `amber`, or `mono`)
+- walks through category selection
+- shows a review screen before any installs start
+- saves your theme and selected categories in `~/.dotfiles-install-state`
+
+On later runs, the installer opens a rerun menu so you can:
+
+- update your current setup with the saved selections
+- reconfigure categories and review them again
+- change the installer theme before continuing
+
+### Category bundles
+
+| Category | Installs |
+|----------|----------|
+| `zsh` | zsh, Oh My Zsh, zsh plugins, Powerlevel10k, Meslo Nerd Font |
+| `tmux` | tmux |
+| `neovim` | neovim, tree-sitter-cli, repo Neovim config, lazy.nvim sync |
+| `python` | pyenv and the default Python install |
+| `node` | node and npm |
+| `ai` | Claude Code, OpenAI Codex CLI, OpenCode, huggingface-cli |
+| `terminal` | fzf, bat, eza, ripgrep, speedtest, stripe |
+| `developer` | git, gh, jq, kubectl, scw, supabase, Claude settings |
+
+### Installer flags
+
+Use flags when you want to preload installer mode, theme, or category choices before the installer continues:
+
+```bash
+./install.sh --update
+./install.sh --reconfigure --theme amber --categories zsh,tmux,neovim
+./install.sh --all --theme mono
+```
+
+- `--update` switches to update mode; if no saved category state exists yet, it falls back to all categories
+- `--reconfigure` opens the category checklist again before installing
+- `--theme <name>` sets the installer theme up front (`opencode`, `amber`, or `mono`)
+- `--categories <csv>` preloads specific categories before the checklist/review screens
+- `--all` selects every category bundle
+
+Notes:
+
+- On a first run, `--all` and `--categories` still continue through the checklist and review screens with those choices preloaded.
+- On reruns, `--update` skips straight to the update path, while `--categories` or `--all` by themselves only preload selection and do not bypass the rerun menu.
+
 Before first launch, note that the zsh and tmux configs use Nerd Font glyphs. On macOS, the installer will try to install `MesloLGS Nerd Font` for you; you still need to select it in your terminal app.
 
 ### What gets installed

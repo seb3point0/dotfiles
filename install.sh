@@ -24,6 +24,725 @@ if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
 fi
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALLER_STATE_FILE="$HOME/.dotfiles-install-state"
+INSTALLER_MODE="${INSTALLER_MODE:-}"
+INSTALLER_THEME="${INSTALLER_THEME:-}"
+INSTALLER_SELECTED="${INSTALLER_SELECTED:-}"
+INSTALLER_FIRST_RUN="${INSTALLER_FIRST_RUN:-1}"
+
+installer_categories() {
+    cat <<'EOF'
+zsh
+tmux
+neovim
+python
+node
+ai
+terminal
+developer
+EOF
+}
+
+installer_category_label() {
+    case "$1" in
+        zsh) printf '%s\n' 'Zsh and shell defaults' ;;
+        tmux) printf '%s\n' 'Tmux terminal multiplexer' ;;
+        neovim) printf '%s\n' 'Neovim editor setup' ;;
+        python) printf '%s\n' 'Python via pyenv' ;;
+        node) printf '%s\n' 'Node.js tooling' ;;
+        ai) printf '%s\n' 'AI coding tools' ;;
+        terminal) printf '%s\n' 'Terminal utilities' ;;
+        developer) printf '%s\n' 'Developer CLI tools' ;;
+        *) return 1 ;;
+    esac
+}
+
+installer_category_tools() {
+    case "$1" in
+        zsh) printf '%s\n' zsh oh-my-zsh zsh-autosuggestions zsh-syntax-highlighting powerlevel10k meslo-nerd-font ;;
+        tmux) printf '%s\n' tmux ;;
+        neovim) printf '%s\n' neovim tree-sitter-cli nvim-config lazy-nvim ;;
+        python) printf '%s\n' pyenv python ;;
+        node) printf '%s\n' node npm ;;
+        ai) printf '%s\n' claude codex opencode huggingface-cli ;;
+        terminal) printf '%s\n' fzf bat eza ripgrep speedtest stripe ;;
+        developer) printf '%s\n' git gh jq kubectl scw supabase claude-settings ;;
+        *) return 1 ;;
+    esac
+}
+
+save_installer_state() {
+    local theme selected first_run tmp_state state_dir
+    if [[ $# -ge 1 ]]; then
+        theme="$1"
+    else
+        theme="${INSTALLER_THEME:-}"
+    fi
+    if [[ $# -ge 2 ]]; then
+        selected="$2"
+    else
+        selected="${INSTALLER_SELECTED:-}"
+    fi
+    if [[ $# -ge 3 ]]; then
+        first_run="$3"
+    else
+        first_run="${INSTALLER_FIRST_RUN:-0}"
+    fi
+
+    INSTALLER_THEME="$theme"
+    INSTALLER_SELECTED="$selected"
+    INSTALLER_FIRST_RUN="$first_run"
+
+    state_dir=$(dirname "$INSTALLER_STATE_FILE")
+    mkdir -p "$state_dir"
+    tmp_state=$(mktemp "$state_dir/.dotfiles-install-state.XXXXXX")
+    cat > "$tmp_state" <<EOF
+INSTALLER_THEME=$INSTALLER_THEME
+INSTALLER_SELECTED=$INSTALLER_SELECTED
+INSTALLER_FIRST_RUN=$INSTALLER_FIRST_RUN
+EOF
+    mv "$tmp_state" "$INSTALLER_STATE_FILE"
+}
+
+load_installer_state() {
+    local line key value
+    INSTALLER_THEME=""
+    INSTALLER_SELECTED=""
+    INSTALLER_FIRST_RUN=1
+
+    if [[ -f "$INSTALLER_STATE_FILE" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" ]] && continue
+            case "$line" in
+                INSTALLER_THEME=*|INSTALLER_SELECTED=*|INSTALLER_FIRST_RUN=*) ;;
+                *)
+                    warn "Invalid installer state detected - resetting saved installer state"
+                    INSTALLER_THEME=""
+                    INSTALLER_SELECTED=""
+                    INSTALLER_FIRST_RUN=1
+                    rm -f "$INSTALLER_STATE_FILE"
+                    return
+                    ;;
+            esac
+
+            key=${line%%=*}
+            value=${line#*=}
+
+            if [[ "$value" =~ ^\'.*\'$ ]]; then
+                value=${value#\'}
+                value=${value%\'}
+            fi
+
+            case "$key" in
+                INSTALLER_THEME) INSTALLER_THEME="$value" ;;
+                INSTALLER_SELECTED) INSTALLER_SELECTED="$value" ;;
+                INSTALLER_FIRST_RUN) INSTALLER_FIRST_RUN="$value" ;;
+            esac
+        done < "$INSTALLER_STATE_FILE"
+    fi
+}
+
+installer_all_categories_csv() {
+    installer_categories | paste -sd, -
+}
+
+installer_has_category() {
+    local category
+    category="$1"
+    installer_categories | grep -qx "$category"
+}
+
+installer_selected_has_category() {
+    local selected_csv category selected
+    selected_csv="${1:-$INSTALLER_SELECTED}"
+    category="$2"
+
+    IFS=, read -r -a selected <<< "$selected_csv"
+    for selected_category in "${selected[@]}"; do
+        [[ "$selected_category" == "$category" ]] && return 0
+    done
+
+    return 1
+}
+
+validate_installer_categories_csv() {
+    local csv category
+    csv="$1"
+
+    IFS=, read -r -a categories <<< "$csv"
+    for category in "${categories[@]}"; do
+        [[ -n "$category" ]] || fail "Empty category entry in: $csv"
+        installer_has_category "$category" || fail "Unknown category: $category"
+    done
+}
+
+set_installer_mode() {
+    local new_mode
+    new_mode="$1"
+
+    if [[ -n "$INSTALLER_MODE" && "$INSTALLER_MODE" != "$new_mode" ]]; then
+        fail "Conflicting installer modes: $INSTALLER_MODE and $new_mode"
+    fi
+
+    INSTALLER_MODE="$new_mode"
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --update)
+                set_installer_mode "update"
+                shift
+                ;;
+            --reconfigure)
+                set_installer_mode "reconfigure"
+                shift
+                ;;
+            --all)
+                INSTALLER_SELECTED="$(installer_all_categories_csv)"
+                shift
+                ;;
+            --theme)
+                [[ $# -ge 2 ]] || fail "Missing value for --theme"
+                [[ "$2" != --* ]] || fail "Missing value for --theme"
+                INSTALLER_THEME="$2"
+                shift 2
+                ;;
+            --theme=*)
+                INSTALLER_THEME="${1#--theme=}"
+                [[ -n "$INSTALLER_THEME" ]] || fail "Missing value for --theme"
+                [[ "$INSTALLER_THEME" != --* ]] || fail "Missing value for --theme"
+                shift
+                ;;
+            --categories)
+                [[ $# -ge 2 ]] || fail "Missing value for --categories"
+                [[ "$2" != --* ]] || fail "Missing value for --categories"
+                validate_installer_categories_csv "$2"
+                INSTALLER_SELECTED="$2"
+                shift 2
+                ;;
+            --categories=*)
+                INSTALLER_SELECTED="${1#--categories=}"
+                [[ -n "$INSTALLER_SELECTED" ]] || fail "Missing value for --categories"
+                [[ "$INSTALLER_SELECTED" != --* ]] || fail "Missing value for --categories"
+                validate_installer_categories_csv "$INSTALLER_SELECTED"
+                shift
+                ;;
+            *)
+                fail "Unknown argument: $1"
+                ;;
+        esac
+    done
+}
+
+THEME_NAME="${THEME_NAME:-}"
+THEME_PRIMARY="${THEME_PRIMARY:-}"
+THEME_ACCENT="${THEME_ACCENT:-}"
+THEME_SUCCESS="${THEME_SUCCESS:-}"
+THEME_WARNING="${THEME_WARNING:-}"
+THEME_MUTED="${THEME_MUTED:-}"
+THEME_RESET="${THEME_RESET:-$'\033[0m'}"
+
+set_theme() {
+    local theme
+    theme="${1:-opencode}"
+
+    case "$theme" in
+        opencode)
+            THEME_NAME="opencode"
+            THEME_PRIMARY=$'\033[38;5;45m'
+            THEME_ACCENT=$'\033[1;37m'
+            THEME_SUCCESS=$'\033[38;5;42m'
+            THEME_WARNING=$'\033[38;5;220m'
+            THEME_MUTED=$'\033[38;5;245m'
+            ;;
+        amber)
+            THEME_NAME="amber"
+            THEME_PRIMARY=$'\033[38;5;214m'
+            THEME_ACCENT=$'\033[1;33m'
+            THEME_SUCCESS=$'\033[38;5;178m'
+            THEME_WARNING=$'\033[38;5;223m'
+            THEME_MUTED=$'\033[38;5;246m'
+            ;;
+        mono)
+            THEME_NAME="mono"
+            THEME_PRIMARY=$'\033[1;37m'
+            THEME_ACCENT=$'\033[0;37m'
+            THEME_SUCCESS=$'\033[0;32m'
+            THEME_WARNING=$'\033[1;30m'
+            THEME_MUTED=$'\033[0;90m'
+            ;;
+        *)
+            warn "Unknown theme '$theme' - falling back to opencode"
+            set_theme opencode
+            return
+            ;;
+    esac
+
+    INSTALLER_THEME="$THEME_NAME"
+}
+
+render_header() {
+    local title subtitle
+    title="${1:-}"
+    subtitle="${2:-}"
+
+    printf '\n%b%s%b\n' "$THEME_PRIMARY" "$title" "$THEME_RESET"
+    if [[ -n "$subtitle" ]]; then
+        printf '%b%s%b\n' "$THEME_MUTED" "$subtitle" "$THEME_RESET"
+    fi
+}
+
+render_menu_row() {
+    local index label detail marker
+    index="${1:-}"
+    label="${2:-}"
+    detail="${3:-}"
+    marker="${4:- }"
+
+    printf '%b[%s]%b %b%s%b' "$THEME_PRIMARY" "$index" "$THEME_RESET" "$THEME_ACCENT" "$label" "$THEME_RESET"
+    if [[ -n "$detail" ]]; then
+        printf ' %b%s%b' "$THEME_MUTED" "$detail" "$THEME_RESET"
+    fi
+    if [[ -n "$marker" ]]; then
+        printf ' %b%s%b' "$THEME_SUCCESS" "$marker" "$THEME_RESET"
+    fi
+    printf '\n'
+}
+
+installer_has_interactive_terminal() {
+    [[ -t 0 && -t 1 && -z "${INSTALLER_TEST_MODE:-}" ]]
+}
+
+installer_supports_advanced_input() {
+    installer_has_interactive_terminal && command -v tput >/dev/null 2>&1
+}
+
+installer_numbered_choice() {
+    local prompt default_choice max_choice choice
+    prompt="$1"
+    default_choice="$2"
+    max_choice="$3"
+
+    if ! installer_has_interactive_terminal; then
+        printf '%s\n' "$default_choice"
+        return
+    fi
+
+    while true; do
+        read -r -p "$prompt" choice
+        choice="${choice:-$default_choice}"
+        if [[ "$choice" =~ ^[1-9][0-9]*$ ]] && (( choice >= 1 && choice <= max_choice )); then
+            printf '%s\n' "$choice"
+            return
+        fi
+        warn "Enter a number between 1 and $max_choice"
+    done
+}
+
+installer_menu_select() {
+    local title subtitle default_choice selected_key key escape_sequence
+    title="$1"
+    subtitle="$2"
+    default_choice="$3"
+    shift 3
+    local options=("$@")
+    local selected_index=$((default_choice - 1))
+
+    if ! installer_supports_advanced_input; then
+        render_header "$title" "$subtitle" >&2
+        local i label detail
+        for i in "${!options[@]}"; do
+            IFS='|' read -r _ label detail <<< "${options[$i]}"
+            render_menu_row "$((i + 1))" "$label" "$detail" "" >&2
+        done
+        installer_numbered_choice "Choose [1-${#options[@]}] (default: $default_choice): " "$default_choice" "${#options[@]}"
+        return
+    fi
+
+    while true; do
+        printf '\033[2J\033[H' >&2
+        render_header "$title" "$subtitle" >&2
+
+        local i label detail marker
+        for i in "${!options[@]}"; do
+            IFS='|' read -r _ label detail <<< "${options[$i]}"
+            marker=""
+            if (( i == selected_index )); then
+                marker="<"
+            fi
+            render_menu_row "$((i + 1))" "$label" "$detail" "$marker" >&2
+        done
+
+        printf '%bUse arrow keys or j/k, then press Enter.%b\n' "$THEME_MUTED" "$THEME_RESET" >&2
+
+        read -rsn1 key
+        case "$key" in
+            $'\n'|$'\r')
+                printf '%s\n' "$((selected_index + 1))"
+                return
+                ;;
+            k)
+                selected_index=$(((selected_index - 1 + ${#options[@]}) % ${#options[@]}))
+                ;;
+            j)
+                selected_index=$(((selected_index + 1) % ${#options[@]}))
+                ;;
+            $'\033')
+                read -rsn2 escape_sequence || true
+                case "$escape_sequence" in
+                    '[A') selected_index=$(((selected_index - 1 + ${#options[@]}) % ${#options[@]})) ;;
+                    '[B') selected_index=$(((selected_index + 1) % ${#options[@]})) ;;
+                esac
+                ;;
+            [1-9])
+                if (( key >= 1 && key <= ${#options[@]} )); then
+                    printf '%s\n' "$key"
+                    return
+                fi
+                ;;
+        esac
+    done
+}
+
+choose_default_mode() {
+    if [[ -n "$INSTALLER_MODE" ]]; then
+        return
+    fi
+
+    if [[ "${INSTALLER_FIRST_RUN:-1}" == "1" ]]; then
+        INSTALLER_MODE="wizard"
+    else
+        INSTALLER_MODE="menu"
+    fi
+}
+
+show_existing_install_menu() {
+    local selection
+    selection="$(installer_menu_select \
+        "dotfiles installer" \
+        "Choose how to continue with your existing setup." \
+        "1" \
+        "update|Update current setup|Re-run installs with saved selections" \
+        "reconfigure|Reconfigure categories|Pick a different set of tools" \
+        "theme|Change theme|Switch installer colors before continuing")"
+
+    case "$selection" in
+        1) INSTALLER_MODE="update" ;;
+        2) INSTALLER_MODE="reconfigure" ;;
+        3)
+            show_theme_picker
+            INSTALLER_MODE="menu"
+            ;;
+        *) fail "Unknown installer menu selection: $selection" ;;
+    esac
+}
+
+show_theme_picker() {
+    local selection
+    selection="$(installer_menu_select \
+        "Choose a theme" \
+        "Pick the installer look and feel." \
+        "1" \
+        "opencode|OpenCode|Bright cyan accents" \
+        "amber|Amber|Warm terminal tones" \
+        "mono|Mono|Minimal grayscale palette")"
+
+    case "$selection" in
+        1) set_theme opencode ;;
+        2) set_theme amber ;;
+        3) set_theme mono ;;
+        *) fail "Unknown theme selection: $selection" ;;
+    esac
+}
+
+select_default_categories() {
+    INSTALLER_SELECTED="$(installer_all_categories_csv)"
+}
+
+toggle_category() {
+    local category updated=() existing
+    category="$1"
+
+    installer_has_category "$category" || fail "Unknown category: $category"
+
+    for existing in $(installer_categories); do
+        if [[ "$existing" == "$category" ]]; then
+            if installer_selected_has_category "$INSTALLER_SELECTED" "$category"; then
+                continue
+            fi
+            updated+=("$existing")
+            continue
+        fi
+
+        if installer_selected_has_category "$INSTALLER_SELECTED" "$existing"; then
+            updated+=("$existing")
+        fi
+    done
+
+    INSTALLER_SELECTED="$(IFS=,; printf '%s' "${updated[*]}")"
+}
+
+show_category_details() {
+    local category label
+    category="$1"
+    installer_has_category "$category" || fail "Unknown category: $category"
+    label="$(installer_category_label "$category")"
+
+    render_header "$label" "$category"
+    printf '%bIncludes:%b\n' "$THEME_MUTED" "$THEME_RESET"
+    while IFS= read -r tool; do
+        printf '  - %s\n' "$tool"
+    done < <(installer_category_tools "$category")
+}
+
+show_review_screen() {
+    local category label
+
+    render_header "Review selections" "Check the categories queued for install."
+    render_menu_row "-" "Theme" "${INSTALLER_THEME:-opencode}" ""
+
+    if [[ -z "$INSTALLER_SELECTED" ]]; then
+        render_menu_row "-" "Categories" "None selected" ""
+        return
+    fi
+
+    while IFS= read -r category; do
+        if ! installer_selected_has_category "$INSTALLER_SELECTED" "$category"; then
+            continue
+        fi
+
+        label="$(installer_category_label "$category")"
+        render_menu_row "-" "$label" "$category" ""
+        printf '%b    %s%b\n' "$THEME_MUTED" "$(installer_category_tools "$category" | paste -sd, -)" "$THEME_RESET"
+    done < <(installer_categories)
+}
+
+installer_task_state_var() {
+    printf 'INSTALLER_TASK_STATE_%s' "$1"
+}
+
+mark_task_state() {
+    local category state state_var
+    category="$1"
+    state="$2"
+
+    installer_has_category "$category" || fail "Unknown category: $category"
+
+    case "$state" in
+        pending|running|done|skipped|failed) ;;
+        *) fail "Unknown task state: $state" ;;
+    esac
+
+    state_var="$(installer_task_state_var "$category")"
+    printf -v "$state_var" '%s' "$state"
+}
+
+get_task_state() {
+    local category state_var state
+    category="$1"
+
+    installer_has_category "$category" || fail "Unknown category: $category"
+
+    state_var="$(installer_task_state_var "$category")"
+    state="${!state_var:-pending}"
+    printf '%s\n' "$state"
+}
+
+initialize_task_states() {
+    local selected_csv category
+    selected_csv="${1:-$INSTALLER_SELECTED}"
+
+    while IFS= read -r category; do
+        mark_task_state "$category" skipped
+    done < <(installer_categories)
+
+    if [[ -z "$selected_csv" ]]; then
+        selected_csv="$(installer_all_categories_csv)"
+    fi
+
+    validate_installer_categories_csv "$selected_csv"
+    IFS=, read -r -a categories <<< "$selected_csv"
+    for category in "${categories[@]}"; do
+        mark_task_state "$category" pending
+    done
+}
+
+task_state_marker() {
+    case "$1" in
+        pending) printf '%s\n' 'pending' ;;
+        running) printf '%s\n' 'running' ;;
+        done) printf '%s\n' 'done' ;;
+        skipped) printf '%s\n' 'skipped' ;;
+        failed) printf '%s\n' 'failed' ;;
+    esac
+}
+
+task_state_color() {
+    case "$1" in
+        pending) printf '%s\n' "$THEME_MUTED" ;;
+        running) printf '%s\n' "$THEME_PRIMARY" ;;
+        done) printf '%s\n' "$THEME_SUCCESS" ;;
+        skipped) printf '%s\n' "$THEME_WARNING" ;;
+        failed) printf '%s\n' "$RED" ;;
+        *) printf '%s\n' "$THEME_MUTED" ;;
+    esac
+}
+
+render_execution_screen() {
+    local selected_csv category label state color marker
+    selected_csv="${1:-$INSTALLER_SELECTED}"
+
+    if [[ -z "${INSTALLER_TEST_MODE:-}" ]] && installer_has_interactive_terminal; then
+        printf '\033[2J\033[H'
+    fi
+
+    render_header "Installing dotfiles" "Live progress by category."
+    while IFS= read -r category; do
+        if ! installer_selected_has_category "$selected_csv" "$category"; then
+            continue
+        fi
+
+        label="$(installer_category_label "$category")"
+        state="$(get_task_state "$category")"
+        color="$(task_state_color "$state")"
+        marker="$(task_state_marker "$state")"
+
+        printf '%b[%s]%b %b%s%b %b%s%b\n' \
+            "$color" "$marker" "$THEME_RESET" \
+            "$THEME_ACCENT" "$label" "$THEME_RESET" \
+            "$THEME_MUTED" "$category" "$THEME_RESET"
+    done < <(installer_categories)
+}
+
+render_final_summary() {
+    local selected_csv category label state pending_count running_count done_count skipped_count failed_count
+    selected_csv="${1:-$INSTALLER_SELECTED}"
+
+    pending_count=0
+    running_count=0
+    done_count=0
+    skipped_count=0
+    failed_count=0
+
+    render_header "Installer summary" "Final category results."
+    while IFS= read -r category; do
+        if [[ -n "$selected_csv" ]] && ! installer_selected_has_category "$selected_csv" "$category"; then
+            continue
+        fi
+
+        state="$(get_task_state "$category")"
+        case "$state" in
+            pending) pending_count=$((pending_count + 1)) ;;
+            running) running_count=$((running_count + 1)) ;;
+            done) done_count=$((done_count + 1)) ;;
+            skipped) skipped_count=$((skipped_count + 1)) ;;
+            failed) failed_count=$((failed_count + 1)) ;;
+        esac
+
+        label="$(installer_category_label "$category")"
+        printf '  - %s: %s\n' "$label" "$state"
+    done < <(installer_categories)
+
+    printf '\n'
+    printf '  done: %s\n' "$done_count"
+    printf '  skipped: %s\n' "$skipped_count"
+    printf '  failed: %s\n' "$failed_count"
+    printf '  pending: %s\n' "$pending_count"
+    printf '  running: %s\n' "$running_count"
+}
+
+show_category_checklist() {
+    local category choice action
+
+    if [[ -z "$INSTALLER_SELECTED" ]]; then
+        select_default_categories
+    fi
+
+    while true; do
+        render_header "Choose categories" "Toggle bundles for this machine, review, or continue."
+        while IFS= read -r category; do
+            if installer_selected_has_category "$INSTALLER_SELECTED" "$category"; then
+                render_menu_row "x" "$(installer_category_label "$category")" "$category" "on"
+            else
+                render_menu_row " " "$(installer_category_label "$category")" "$category" "off"
+            fi
+        done < <(installer_categories)
+
+        printf '%bActions:%b\n' "$THEME_MUTED" "$THEME_RESET"
+        printf '  1) Toggle a category\n'
+        printf '  2) View category details\n'
+        printf '  3) Review selection\n'
+        printf '  4) Continue\n'
+
+        choice="$(installer_numbered_choice "Choose [1-4] (default: 4): " "4" "4")"
+        case "$choice" in
+            1)
+                category="$(installer_menu_select \
+                    "Toggle category" \
+                    "Choose a bundle to enable or disable." \
+                    "1" \
+                    "zsh|$(installer_category_label zsh)|zsh" \
+                    "tmux|$(installer_category_label tmux)|tmux" \
+                    "neovim|$(installer_category_label neovim)|neovim" \
+                    "python|$(installer_category_label python)|python" \
+                    "node|$(installer_category_label node)|node" \
+                    "ai|$(installer_category_label ai)|ai" \
+                    "terminal|$(installer_category_label terminal)|terminal" \
+                    "developer|$(installer_category_label developer)|developer")"
+                case "$category" in
+                    1) action="zsh" ;;
+                    2) action="tmux" ;;
+                    3) action="neovim" ;;
+                    4) action="python" ;;
+                    5) action="node" ;;
+                    6) action="ai" ;;
+                    7) action="terminal" ;;
+                    8) action="developer" ;;
+                    *) fail "Unknown category selection: $category" ;;
+                esac
+                toggle_category "$action"
+                ;;
+            2)
+                category="$(installer_menu_select \
+                    "Category details" \
+                    "Inspect the tools bundled in a category." \
+                    "1" \
+                    "zsh|$(installer_category_label zsh)|zsh" \
+                    "tmux|$(installer_category_label tmux)|tmux" \
+                    "neovim|$(installer_category_label neovim)|neovim" \
+                    "python|$(installer_category_label python)|python" \
+                    "node|$(installer_category_label node)|node" \
+                    "ai|$(installer_category_label ai)|ai" \
+                    "terminal|$(installer_category_label terminal)|terminal" \
+                    "developer|$(installer_category_label developer)|developer")"
+                case "$category" in
+                    1) show_category_details zsh ;;
+                    2) show_category_details tmux ;;
+                    3) show_category_details neovim ;;
+                    4) show_category_details python ;;
+                    5) show_category_details node ;;
+                    6) show_category_details ai ;;
+                    7) show_category_details terminal ;;
+                    8) show_category_details developer ;;
+                    *) fail "Unknown category detail selection: $category" ;;
+                esac
+                if installer_has_interactive_terminal; then
+                    read -r -p "Press Enter to return to categories..." action
+                fi
+                ;;
+            3)
+                show_review_screen
+                if installer_has_interactive_terminal; then
+                    read -r -p "Press Enter to return to categories..." action
+                fi
+                ;;
+            4)
+                return
+                ;;
+        esac
+    done
+}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -115,7 +834,9 @@ ensure_git_identity() {
 
 OS="$(uname -s)"
 
-refresh_dotfiles_repo
+if [[ -z "${INSTALLER_TEST_MODE:-}" ]]; then
+    refresh_dotfiles_repo
+fi
 
 # ============================================================================
 # Homebrew
@@ -162,23 +883,28 @@ install_brew() {
 install_brew_packages() {
     step "Installing brew packages"
 
-    local packages=(
-        git
-        neovim
-        tmux
-        zsh
-        fzf
-        bat
-        eza
-        ripgrep
-        node
-        tree-sitter-cli
-        gh
-        huggingface-cli
-        kubectl
-        pyenv
-        scw
-    )
+    local packages=("$@")
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        packages=(
+            git
+            neovim
+            tmux
+            zsh
+            fzf
+            bat
+            eza
+            ripgrep
+            node
+            tree-sitter-cli
+            gh
+            huggingface-cli
+            jq
+            kubectl
+            pyenv
+            scw
+        )
+    fi
 
     for pkg in "${packages[@]}"; do
         if brew list "$pkg" &>/dev/null; then
@@ -230,10 +956,14 @@ install_tap_packages() {
 
     # Format: "tap/formula" — brew installs the tap automatically
     # Note: scw is in homebrew-core, installed via install_brew_packages instead
-    local tap_packages=(
-        "teamookla/speedtest/speedtest"
-        "supabase/tap/supabase"
-    )
+    local tap_packages=("$@")
+
+    if [[ ${#tap_packages[@]} -eq 0 ]]; then
+        tap_packages=(
+            "teamookla/speedtest/speedtest"
+            "supabase/tap/supabase"
+        )
+    fi
 
     for formula in "${tap_packages[@]}"; do
         local pkg="${formula##*/}"
@@ -506,6 +1236,20 @@ setup_symlinks() {
     [[ -f "$HOME/.zshrc.local" ]] || touch "$HOME/.zshrc.local"
 }
 
+setup_zsh_symlinks() {
+    info "Creating zsh symlinks..."
+    symlink "$DOTFILES_DIR/zsh/zshrc"    "$HOME/.zshrc"
+    symlink "$DOTFILES_DIR/zsh/zprofile" "$HOME/.zprofile"
+    symlink "$DOTFILES_DIR/zsh/p10k.zsh" "$HOME/.p10k.zsh"
+
+    [[ -f "$HOME/.zshrc.local" ]] || touch "$HOME/.zshrc.local"
+}
+
+setup_tmux_symlinks() {
+    info "Creating tmux symlinks..."
+    symlink "$DOTFILES_DIR/tmux/tmux.conf" "$HOME/.tmux.conf"
+}
+
 # ============================================================================
 # Claude Code settings
 # ============================================================================
@@ -577,48 +1321,160 @@ set_default_shell() {
 }
 
 # ============================================================================
-# Main
+# Category runners
 # ============================================================================
 
-main() {
-    echo
-    echo -e "${CYAN}════════════════════════════════════════${NC}"
-    echo -e "${CYAN}  dotfiles installer${NC}"
-    echo -e "${CYAN}════════════════════════════════════════${NC}"
-    echo -e "  OS:       $OS"
-    echo -e "  Dotfiles: $DOTFILES_DIR"
-    echo
-
-    section "Core tooling"
+install_zsh_category() {
+    section "Zsh and shell defaults"
     install_brew
-    install_brew_packages
-    install_python_env
-    install_tap_packages
-    install_stripe
-    install_claude_code
-    install_codex
-    install_opencode
-
-    ensure_git_identity
-
-    section "Shell and editor setup"
-    install_claude_settings
+    install_brew_packages zsh git
     install_ohmyzsh
     install_zsh_plugins
     install_powerlevel10k
     install_nerd_font
-    setup_symlinks
-    setup_nvim
+    setup_zsh_symlinks
     set_default_shell
+}
+
+install_tmux_category() {
+    section "Tmux terminal multiplexer"
+    install_brew
+    install_brew_packages tmux
+    setup_tmux_symlinks
+}
+
+install_neovim_category() {
+    section "Neovim editor setup"
+    install_brew
+    install_brew_packages neovim tree-sitter-cli
+    setup_nvim
+}
+
+install_python_category() {
+    section "Python via pyenv"
+    install_brew
+    install_brew_packages pyenv
+    install_python_env
+}
+
+install_node_category() {
+    section "Node.js tooling"
+    install_brew
+    install_brew_packages node
+}
+
+install_ai_category() {
+    section "AI coding tools"
+    install_brew
+    install_brew_packages node huggingface-cli
+    install_claude_code
+    install_codex
+    install_opencode
+}
+
+install_terminal_category() {
+    section "Terminal utilities"
+    install_brew
+    install_brew_packages fzf bat eza ripgrep
+    install_tap_packages teamookla/speedtest/speedtest
+    install_stripe
+}
+
+install_developer_category() {
+    section "Developer CLI tools"
+    install_brew
+    install_brew_packages git gh jq kubectl scw
+    install_tap_packages supabase/tap/supabase
+    install_claude_settings
+    ensure_git_identity
+}
+
+run_selected_categories() {
+    local selected_csv category
+    selected_csv="${1:-$INSTALLER_SELECTED}"
+
+    if [[ -z "$selected_csv" ]]; then
+        selected_csv="$(installer_all_categories_csv)"
+    fi
+
+    initialize_task_states "$selected_csv"
+    render_execution_screen "$selected_csv"
+
+    IFS=, read -r -a categories <<< "$selected_csv"
+    for category in "${categories[@]}"; do
+        mark_task_state "$category" running
+        render_execution_screen "$selected_csv"
+
+        if case "$category" in
+            zsh) install_zsh_category ;;
+            tmux) install_tmux_category ;;
+            neovim) install_neovim_category ;;
+            python) install_python_category ;;
+            node) install_node_category ;;
+            ai) install_ai_category ;;
+            terminal) install_terminal_category ;;
+            developer) install_developer_category ;;
+            *) fail "Unknown category: $category" ;;
+        esac; then
+            mark_task_state "$category" done
+        else
+            mark_task_state "$category" failed
+            render_execution_screen "$selected_csv"
+            render_final_summary "$selected_csv"
+            fail "Category install failed: $category"
+        fi
+
+        render_execution_screen "$selected_csv"
+    done
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+main() {
+    choose_default_mode
+
+    if [[ "$INSTALLER_MODE" == "menu" ]]; then
+        show_existing_install_menu
+    fi
+
+    if [[ -z "$INSTALLER_THEME" ]]; then
+        show_theme_picker
+    else
+        set_theme "$INSTALLER_THEME"
+    fi
+
+    set_theme "${INSTALLER_THEME:-opencode}"
+    render_header "dotfiles installer" "OS: $OS | Dotfiles: $DOTFILES_DIR"
+    [[ -n "$INSTALLER_MODE" ]] && render_menu_row "-" "Mode" "$INSTALLER_MODE"
+    [[ -n "$INSTALLER_THEME" ]] && render_menu_row "-" "Theme" "$INSTALLER_THEME"
+    [[ -n "$INSTALLER_SELECTED" ]] && render_menu_row "-" "Select" "$INSTALLER_SELECTED"
+    echo
+
+    if [[ "$INSTALLER_MODE" == "wizard" || "$INSTALLER_MODE" == "reconfigure" ]]; then
+        show_category_checklist
+        echo
+        show_review_screen
+        echo
+    fi
+
+    run_selected_categories "$INSTALLER_SELECTED"
 
     echo
     success "All done!"
+    render_final_summary "$INSTALLER_SELECTED"
     summary \
         "Machine-specific config goes in ~/.zshrc.local" \
         "Run 'p10k configure' to customize your prompt" \
         "Open nvim and run :Lazy to check plugin status" \
         "Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)"
+
+    save_installer_state "$INSTALLER_THEME" "$INSTALLER_SELECTED" 0
 }
+
+load_installer_state
+parse_args "$@"
 
 if [[ -z "${INSTALLER_TEST_MODE:-}" ]]; then
     main "$@"
