@@ -20,6 +20,8 @@ cd ~/.dotfiles
 
 The installer is idempotent — safe to re-run, skips anything already present.
 
+Before first launch, note that the zsh and tmux configs use Nerd Font glyphs. On macOS, the installer will try to install `MesloLGS Nerd Font` for you; you still need to select it in your terminal app.
+
 ### What gets installed
 
 | Step | What |
@@ -34,6 +36,7 @@ The installer is idempotent — safe to re-run, skips anything already present.
 | Oh My Zsh | Shell framework |
 | Zsh plugins | zsh-autosuggestions, zsh-syntax-highlighting |
 | Powerlevel10k | Prompt theme |
+| Nerd Font | Attempts to install `MesloLGS Nerd Font` on macOS via Homebrew cask |
 | Symlinks | `~/.zshrc`, `~/.p10k.zsh`, `~/.tmux.conf` → dotfiles repo |
 | Neovim config | Symlinked `~/.config/nvim`, all plugins via lazy.nvim (headless sync) |
 | TPM plugins | tmux-resurrect, tmux-continuum |
@@ -41,7 +44,8 @@ The installer is idempotent — safe to re-run, skips anything already present.
 
 ### Post-install
 
-- Install a [Nerd Font](https://www.nerdfonts.com/) and set it in your terminal — **MesloLGS NF** is recommended (ships with Powerlevel10k)
+- Confirm your terminal is using a [Nerd Font](https://www.nerdfonts.com/) — **MesloLGS Nerd Font** is the expected choice for this repo
+- If the installer could not auto-install fonts on your platform, install one manually before judging zsh/tmux rendering
 - Run `p10k configure` to customize the prompt
 - Machine-specific config (env vars, secrets, paths) goes in `~/.zshrc.local` — not tracked by git
 

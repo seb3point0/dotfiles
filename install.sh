@@ -306,6 +306,36 @@ install_powerlevel10k() {
 }
 
 # ============================================================================
+# Fonts
+# ============================================================================
+
+install_nerd_font() {
+    local font_cask="font-meslo-lg-nerd-font"
+
+    if [[ "$OS" != "Darwin" ]]; then
+        warn "Nerd Font auto-install is only configured for macOS + Homebrew"
+        return
+    fi
+
+    if ! command -v brew &>/dev/null; then
+        warn "Homebrew not found - skipping Nerd Font install"
+        return
+    fi
+
+    if brew list --cask "$font_cask" &>/dev/null; then
+        info "Meslo Nerd Font already installed"
+        return
+    fi
+
+    info "Installing Meslo Nerd Font..."
+    if brew install --cask "$font_cask"; then
+        success "Meslo Nerd Font installed"
+    else
+        warn "Meslo Nerd Font install failed (non-fatal, set up a Nerd Font manually)"
+    fi
+}
+
+# ============================================================================
 # Neovim config (jdhao/nvim-config)
 # ============================================================================
 
@@ -478,6 +508,7 @@ main() {
     install_ohmyzsh
     install_zsh_plugins
     install_powerlevel10k
+    install_nerd_font
     setup_symlinks
     setup_nvim
     set_default_shell
@@ -489,8 +520,10 @@ main() {
     echo "  - Machine-specific config goes in ~/.zshrc.local"
     echo "  - Run 'p10k configure' to customize your prompt"
     echo "  - Open nvim and run :Lazy to check plugin status"
-    echo "  - Install a Nerd Font for powerline/icon support"
+    echo "  - Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)"
     echo
 }
 
-main "$@"
+if [[ -z "${INSTALLER_TEST_MODE:-}" ]]; then
+    main "$@"
+fi
