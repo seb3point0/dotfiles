@@ -9,10 +9,82 @@ set -euo pipefail
 # Fresh install: curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/install.sh | bash
 # ============================================================================
 
+bootstrap_info() { printf '[bootstrap] %s\n' "$*"; }
+bootstrap_fail() { printf '[bootstrap] %s\n' "$*" >&2; exit 1; }
+
+ensure_bootstrap_brew() {
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        return
+    fi
+
+    if command -v brew >/dev/null 2>&1; then
+        return
+    fi
+
+    if ! command -v curl >/dev/null 2>&1; then
+        bootstrap_fail "curl is required to install Homebrew on macOS"
+    fi
+
+    bootstrap_info "Installing Homebrew..."
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || \
+        bootstrap_fail "Homebrew install failed"
+
+    if [[ -x /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -x /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+
+    command -v brew >/dev/null 2>&1 || bootstrap_fail "Homebrew install completed but brew is not on PATH"
+}
+
+install_git_with_native_package_manager() {
+    if command -v apt-get >/dev/null 2>&1; then
+        bootstrap_info "Installing git with apt..."
+        apt-get update && apt-get install -y git
+    elif command -v dnf >/dev/null 2>&1; then
+        bootstrap_info "Installing git with dnf..."
+        dnf install -y git
+    elif command -v yum >/dev/null 2>&1; then
+        bootstrap_info "Installing git with yum..."
+        yum install -y git
+    elif command -v apk >/dev/null 2>&1; then
+        bootstrap_info "Installing git with apk..."
+        apk add --no-cache git
+    elif command -v pacman >/dev/null 2>&1; then
+        bootstrap_info "Installing git with pacman..."
+        pacman -Sy --noconfirm git
+    elif command -v zypper >/dev/null 2>&1; then
+        bootstrap_info "Installing git with zypper..."
+        zypper --non-interactive install git
+    else
+        bootstrap_fail "No supported package manager found to install git"
+    fi
+}
+
+ensure_bootstrap_git() {
+    local os
+    os="$(uname -s)"
+
+    if [[ "$os" == "Darwin" ]]; then
+        ensure_bootstrap_brew
+        if ! command -v git >/dev/null 2>&1; then
+            bootstrap_info "Installing git with Homebrew..."
+            brew install git || bootstrap_fail "git install failed"
+        fi
+        return
+    fi
+
+    if ! command -v git >/dev/null 2>&1; then
+        install_git_with_native_package_manager || bootstrap_fail "git install failed"
+    fi
+}
+
 # If not running from a file (e.g. curl | bash), clone/pull the repo and re-exec
 if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
     _dotfiles="$HOME/.dotfiles"
     _repo="https://github.com/seb3point0/dotfiles.git"
+    ensure_bootstrap_git
     if [[ -d "$_dotfiles/.git" ]]; then
         echo "Dotfiles already at $_dotfiles — pulling latest..."
         git -C "$_dotfiles" pull --ff-only
