@@ -147,8 +147,44 @@ installer_category_tools() {
     esac
 }
 
+category_label() {
+    installer_category_label "$1"
+}
+
+category_description() {
+    case "$1" in
+        zsh) printf '%s\n' 'Shell defaults, prompt, completions, and daily command-line ergonomics.' ;;
+        tmux) printf '%s\n' 'Terminal session management with clipboard-aware defaults.' ;;
+        neovim) printf '%s\n' 'Editor setup, plugin manager, and syntax tooling for coding.' ;;
+        python) printf '%s\n' 'Python runtime management with pyenv and a ready-to-code base toolchain.' ;;
+        node) printf '%s\n' 'Node.js runtime and package tooling for JavaScript and TypeScript work.' ;;
+        ai) printf '%s\n' 'AI coding CLIs and related helpers for assisted development workflows.' ;;
+        terminal) printf '%s\n' 'Everyday terminal utilities for search, navigation, and output cleanup.' ;;
+        developer) printf '%s\n' 'Core developer CLIs for git hosting, APIs, cloud, and project maintenance.' ;;
+        *) return 1 ;;
+    esac
+}
+
+category_preview_tools() {
+    case "$1" in
+        zsh) printf '%s\n' 'zsh, oh-my-zsh, powerlevel10k' ;;
+        tmux) printf '%s\n' 'tmux' ;;
+        neovim) printf '%s\n' 'neovim, lazy-nvim, tree-sitter-cli' ;;
+        python) printf '%s\n' 'pyenv, python' ;;
+        node) printf '%s\n' 'node, npm' ;;
+        ai) printf '%s\n' 'claude, codex, opencode' ;;
+        terminal) printf '%s\n' 'fzf, bat, eza, ripgrep' ;;
+        developer) printf '%s\n' 'git, gh, jq, kubectl' ;;
+        *) return 1 ;;
+    esac
+}
+
 installer_has_gum() {
     command -v gum >/dev/null 2>&1
+}
+
+installer_is_macos() {
+    [[ "$OS" == "Darwin" ]]
 }
 
 installer_use_gum() {
@@ -497,25 +533,100 @@ gum_theme_success() {
     esac
 }
 
-gum_header() {
+installer_platform_summary() {
+    if installer_is_macos; then
+        printf '%s\n' 'Homebrew first for core packages and dotfiles tools.'
+        return
+    fi
+
+    printf '%s\n' 'Native Linux packages first, Homebrew only when a bundle needs it.'
+}
+
+gum_page() {
     local title subtitle
     title="$1"
     subtitle="${2:-}"
+
     if installer_use_gum; then
         gum style --foreground "$(gum_theme_foreground)" --bold "$title"
-        if [[ -n "$subtitle" ]]; then
-            gum style --foreground "$(gum_theme_muted)" "$subtitle"
-        fi
+        [[ -n "$subtitle" ]] && gum style --foreground "$(gum_theme_muted)" "$subtitle"
+        printf '\n'
         return
     fi
+
     render_header "$title" "$subtitle"
+}
+
+gum_section() {
+    local title body
+    title="$1"
+    body="${2:-}"
+
+    if installer_use_gum; then
+        gum style --foreground "$(gum_theme_foreground)" --bold "$title"
+        [[ -n "$body" ]] && gum style --foreground "$(gum_theme_muted)" "$body"
+        return
+    fi
+
+    printf '%s\n' "$title"
+    [[ -n "$body" ]] && printf '%s\n' "$body"
+}
+
+gum_note() {
+    local body
+    body="$1"
+
+    if installer_use_gum; then
+        gum style --border normal --border-foreground "$(gum_theme_muted)" --padding "0 1" "$body"
+        return
+    fi
+
+    printf '%s\n' "$body"
+}
+
+gum_summary_card() {
+    local title body
+    title="$1"
+    body="$2"
+
+    if installer_use_gum; then
+        gum style --border normal --border-foreground "$(gum_theme_foreground)" --padding "1 2" --margin "0 0 1 0" --width 88 "$title
+
+$body"
+        return
+    fi
+
+    printf '%s\n%s\n' "$title" "$body"
+}
+
+gum_header() {
+    gum_page "$1" "${2:-}"
+}
+
+gum_show_welcome() {
+    local body
+
+    if ! installer_use_gum; then
+        return
+    fi
+
+    gum_page "dotfiles installer" "A guided setup for this machine."
+    printf -v body 'OS: %s\nStrategy: %s\nFlow: %s' "$OS" "$(installer_platform_summary)" 'theme -> bundles -> review -> install'
+    gum_summary_card "Welcome" "$body"
+    gum_note "Use arrow keys to move, space to toggle when available, and enter to continue."
 }
 
 gum_select_theme() {
     local choice
     if installer_use_gum; then
-        gum_header "dotfiles setup" "Choose a theme"
-        choice="$(printf '%s\n' opencode amber mono | gum choose --header "Theme" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)")"
+        gum_page "Theme" "Choose the installer look and feel."
+        gum_note "This only changes installer presentation, not your shell theme or terminal config."
+        choice="$(printf '%s\n' \
+            'opencode - Bright cyan accents for the default installer look' \
+            'amber - Warm terminal tones with softer contrast' \
+            'mono - Neutral grayscale styling with minimal color' \
+            | gum choose --header "Theme" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)")"
+        choice="${choice%% - *}"
         set_theme "$choice"
         return
     fi
@@ -525,7 +636,7 @@ gum_select_theme() {
 gum_select_existing_mode() {
     local choice
     if installer_use_gum; then
-        gum_header "dotfiles setup" "Choose how to continue"
+        gum_page "Setup mode" "Choose how to continue with this machine."
         choice="$(printf '%s\n' update reconfigure theme exit | gum choose --header "Existing install" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)")"
         case "$choice" in
             update|reconfigure) INSTALLER_MODE="$choice" ;;
@@ -538,21 +649,17 @@ gum_select_existing_mode() {
 }
 
 gum_select_categories() {
-    local selected=() line csv
+    local selected=() line csv options=() category
     if installer_use_gum; then
-        gum_header "Select bundles" "Space toggles, Enter continues"
+        gum_page "Bundles" "Select the setup bundles for this machine."
+        gum_note "Choose what this machine needs now. Unselected bundles can be added later by rerunning the installer."
+        while IFS= read -r category; do
+            options+=("$category - $(category_label "$category") - $(category_description "$category")")
+        done < <(installer_categories)
         while IFS= read -r line; do
             selected+=("$line")
         done < <(
-            printf '%s\n' \
-                "zsh - $(installer_category_label zsh)" \
-                "tmux - $(installer_category_label tmux)" \
-                "neovim - $(installer_category_label neovim)" \
-                "python - $(installer_category_label python)" \
-                "node - $(installer_category_label node)" \
-                "ai - $(installer_category_label ai)" \
-                "terminal - $(installer_category_label terminal)" \
-                "developer - $(installer_category_label developer)" \
+            printf '%s\n' "${options[@]}" \
                 | gum choose --no-limit --header "Categories" --cursor.foreground "$(gum_theme_foreground)" --selected.foreground "$(gum_theme_success)"
         )
         if [[ ${#selected[@]} -eq 0 ]]; then
@@ -567,14 +674,18 @@ gum_select_categories() {
 }
 
 gum_review_selection() {
-    local category body="" 
+    local category body note
     if installer_use_gum; then
+        printf -v body 'Theme: %s\nPlatform: %s\n\n' "${INSTALLER_THEME:-opencode}" "$(installer_platform_summary)"
         while IFS= read -r category; do
             installer_selected_has_category "$INSTALLER_SELECTED" "$category" || continue
-            body+="$(installer_category_label "$category") (${category})\n"
-            body+="  $(installer_category_tools "$category" | paste -sd, -)\n\n"
+            printf -v body '%s%s\n%s\nIncludes: %s\n\n' "$body" "$(category_label "$category")" "$(category_description "$category")" "$(category_preview_tools "$category")"
         done < <(installer_categories)
-        gum style --border normal --border-foreground "$(gum_theme_foreground)" --padding "1 2" --margin "1 0" --width 80 "$body"
+        gum_page "Review" "Confirm what will be installed before any changes begin."
+        gum_summary_card "Selected bundles" "$body"
+        note="Linux keeps native packages first and only uses Homebrew when a chosen bundle needs it."
+        installer_is_macos && note="macOS installs Homebrew-backed packages first, then applies the selected dotfile bundles."
+        gum_note "$note"
         return
     fi
     show_review_screen
@@ -582,10 +693,36 @@ gum_review_selection() {
 
 gum_confirm_install() {
     if installer_use_gum; then
-        gum confirm "Start install?"
+        gum confirm "Start installing the selected bundles?"
         return
     fi
     return 0
+}
+
+gum_finish_summary() {
+    local selected_csv category state successes failures body next_step
+    selected_csv="${1:-$INSTALLER_SELECTED}"
+    successes=""
+    failures=""
+
+    while IFS= read -r category; do
+        [[ -n "$selected_csv" ]] && ! installer_selected_has_category "$selected_csv" "$category" && continue
+        state="$(get_task_state "$category")"
+        case "$state" in
+            done) printf -v successes '%s- %s\n' "$successes" "$(category_label "$category")" ;;
+            failed) printf -v failures '%s- %s\n' "$failures" "$(category_label "$category")" ;;
+        esac
+    done < <(installer_categories)
+
+    [[ -z "$successes" ]] && successes=$'- none\n'
+    [[ -z "$failures" ]] && failures=$'- none\n'
+    printf -v next_step '%s\n%s\n%s\n%s' \
+        'Machine-specific config goes in ~/.zshrc.local' \
+        'Run p10k configure to customize your prompt' \
+        'Open nvim and run :Lazy to check plugin status' \
+        'Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)'
+    printf -v body 'Succeeded:\n%s\nFailed:\n%s\nNext:\n%s' "$successes" "$failures" "$next_step"
+    gum_summary_card "Finished" "$body"
 }
 
 run_with_gum_spinner() {
@@ -1030,7 +1167,11 @@ render_execution_screen() {
         printf '\033[2J\033[H'
     fi
 
-    render_header "Installing dotfiles" "Live progress by category."
+    if installer_use_gum; then
+        gum_page "Installing" "Working through the selected bundles one at a time."
+    else
+        render_header "Installing dotfiles" "Live progress by category."
+    fi
     while IFS= read -r category; do
         if ! installer_selected_has_category "$selected_csv" "$category"; then
             continue
@@ -1051,6 +1192,11 @@ render_execution_screen() {
 render_final_summary() {
     local selected_csv category label state pending_count running_count done_count skipped_count failed_count
     selected_csv="${1:-$INSTALLER_SELECTED}"
+
+    if installer_use_gum; then
+        gum_finish_summary "$selected_csv"
+        return
+    fi
 
     pending_count=0
     running_count=0
@@ -1915,11 +2061,15 @@ main() {
     fi
 
     set_theme "${INSTALLER_THEME:-opencode}"
-    render_header "dotfiles installer" "OS: $OS | Dotfiles: $DOTFILES_DIR"
-    [[ -n "$INSTALLER_MODE" ]] && render_menu_row "-" "Mode" "$INSTALLER_MODE"
-    [[ -n "$INSTALLER_THEME" ]] && render_menu_row "-" "Theme" "$INSTALLER_THEME"
-    [[ -n "$INSTALLER_SELECTED" ]] && render_menu_row "-" "Select" "$INSTALLER_SELECTED"
-    echo
+    if installer_use_gum; then
+        gum_show_welcome
+    else
+        render_header "dotfiles installer" "OS: $OS | Dotfiles: $DOTFILES_DIR"
+        [[ -n "$INSTALLER_MODE" ]] && render_menu_row "-" "Mode" "$INSTALLER_MODE"
+        [[ -n "$INSTALLER_THEME" ]] && render_menu_row "-" "Theme" "$INSTALLER_THEME"
+        [[ -n "$INSTALLER_SELECTED" ]] && render_menu_row "-" "Select" "$INSTALLER_SELECTED"
+        echo
+    fi
 
     if [[ "$INSTALLER_MODE" == "wizard" || "$INSTALLER_MODE" == "reconfigure" ]]; then
         show_category_checklist
@@ -1934,11 +2084,13 @@ main() {
     echo
     success "All done!"
     render_final_summary "$INSTALLER_SELECTED"
-    summary \
-        "Machine-specific config goes in ~/.zshrc.local" \
-        "Run 'p10k configure' to customize your prompt" \
-        "Open nvim and run :Lazy to check plugin status" \
-        "Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)"
+    if ! installer_use_gum; then
+        summary \
+            "Machine-specific config goes in ~/.zshrc.local" \
+            "Run 'p10k configure' to customize your prompt" \
+            "Open nvim and run :Lazy to check plugin status" \
+            "Set your terminal font to MesloLGS Nerd Font (or another Nerd Font)"
+    fi
 
     save_installer_state "$INSTALLER_THEME" "$INSTALLER_SELECTED" 0
 }
