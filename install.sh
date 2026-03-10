@@ -193,6 +193,21 @@ prepare_gum_terminal() {
     esac
 }
 
+nvim_headless_runs_cleanly() {
+    local command output status
+    command="$1"
+    output="$(LANG="${2:-C.UTF-8}" LC_ALL="${2:-C.UTF-8}" nvim --headless -c "$command" -c "qa" 2>&1)"
+    status=$?
+
+    printf '%s' "$output"
+
+    [[ $status -eq 0 ]] || return $status
+    [[ "$output" == *"Error detected while processing"* ]] && return 1
+    [[ "$output" == *" E"* ]] && return 1
+    [[ "$output" == E* ]] && return 1
+    return 0
+}
+
 installer_use_gum() {
     prepare_gum_terminal
     [[ -n "$INSTALLER_GUM_ENABLED" ]] && return 0
@@ -1801,18 +1816,20 @@ setup_nvim() {
 
     if command -v nvim &>/dev/null; then
         info "Installing nvim plugins (headless)..."
-        if LANG="$nvim_locale" LC_ALL="$nvim_locale" nvim --headless -c "lua require('lazy').sync({wait=true})" -c "qa"; then
+        if nvim_headless_runs_cleanly "lua require('lazy').sync({wait=true})" "$nvim_locale"; then
             success "nvim plugins installed"
         else
-            warn "nvim plugin sync returned non-zero — check :Lazy in nvim for details"
+            warn "nvim plugin sync failed — check :Lazy in nvim for details"
+            return 1
         fi
 
         if command -v tree-sitter &>/dev/null; then
             info "Pre-installing tree-sitter parsers..."
-            if LANG="$nvim_locale" LC_ALL="$nvim_locale" nvim --headless -c "lua local ts = require('nvim-treesitter'); ts.install('all'):wait()" -c "qa"; then
+            if nvim_headless_runs_cleanly "lua local ts = require('nvim-treesitter'); ts.install('all'):wait()" "$nvim_locale"; then
                 success "tree-sitter parsers installed"
             else
-                warn "tree-sitter parser install returned non-zero — check :TSInstall in nvim for details"
+                warn "tree-sitter parser install failed — check :TSInstall in nvim for details"
+                return 1
             fi
         else
             warn "tree-sitter CLI not found — skipping parser pre-install"
