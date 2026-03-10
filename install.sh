@@ -208,6 +208,18 @@ nvim_headless_runs_cleanly() {
     return 0
 }
 
+installer_git_pull_target() {
+    local repo_dir current_branch
+    repo_dir="$1"
+    current_branch="$(git -C "$repo_dir" branch --show-current 2>/dev/null || true)"
+    if [[ -n "$current_branch" ]]; then
+        printf '%s\n' "$current_branch"
+        return
+    fi
+
+    printf '%s\n' main
+}
+
 installer_use_gum() {
     prepare_gum_terminal
     [[ -n "$INSTALLER_GUM_ENABLED" ]] && return 0
@@ -1404,7 +1416,7 @@ refresh_dotfiles_repo() {
     fi
 
     info "Getting latest dotfiles commit from GitHub..."
-    git -C "$DOTFILES_DIR" pull --ff-only
+    git -C "$DOTFILES_DIR" pull --ff-only origin "$(installer_git_pull_target "$DOTFILES_DIR")"
 
     local commit_info
     commit_info="$(git -C "$DOTFILES_DIR" log -1 --date=short --format='%cd %h')"
