@@ -187,9 +187,10 @@ installer_is_macos() {
     [[ "$OS" == "Darwin" ]]
 }
 
-prepare_gum_terminal() {
+installer_gum_terminal_supported() {
     case "${TERM:-}" in
-        ""|dumb) export TERM="screen-256color" ;;
+        ""|dumb) return 1 ;;
+        *) return 0 ;;
     esac
 }
 
@@ -221,9 +222,8 @@ installer_git_pull_target() {
 }
 
 installer_use_gum() {
-    prepare_gum_terminal
     [[ -n "$INSTALLER_GUM_ENABLED" ]] && return 0
-    installer_has_interactive_terminal && installer_has_gum
+    installer_has_interactive_terminal && installer_has_gum && installer_gum_terminal_supported
 }
 
 gum_arch() {
@@ -701,7 +701,7 @@ gum_select_categories() {
         else
             csv="$(printf '%s\n' "${selected[@]}" | sed 's/ - .*//' | paste -sd, -)"
         fi
-        printf '%s\n' "$csv"
+        INSTALLER_SELECTED="$csv"
         return
     fi
     installer_multiselect "$@"
@@ -837,8 +837,11 @@ install_category_packages() {
 
     for token in "$@"; do
         case "$token" in
-            git|zsh|tmux|neovim|node|gh|jq|kubectl|ripgrep|fzf)
+            git|zsh|tmux|neovim|gh|jq|kubectl|ripgrep|fzf)
                 linux_packages+=("$token")
+                ;;
+            node)
+                linux_packages+=(nodejs)
                 ;;
             tree-sitter-cli)
                 linux_packages+=(tree-sitter-cli)
@@ -1278,7 +1281,7 @@ show_category_checklist() {
     fi
 
     if installer_use_gum; then
-        INSTALLER_SELECTED="$(gum_select_categories)"
+        gum_select_categories
         return
     fi
 
