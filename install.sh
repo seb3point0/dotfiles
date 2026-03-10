@@ -737,6 +737,11 @@ run_with_gum_spinner() {
     title="$1"
     shift
     if installer_use_gum; then
+        if declare -F "$1" >/dev/null 2>&1; then
+            INSTALLER_TEST_MODE=1 gum spin --spinner dot --title "$title" -- \
+                bash -lc 'installer_source="$1"; shift; cmd=("$@"); set --; source "$installer_source"; "${cmd[@]}"' _ "$DOTFILES_DIR/install.sh" "$@"
+            return
+        fi
         gum spin --spinner dot --title "$title" -- "$@"
         return
     fi
