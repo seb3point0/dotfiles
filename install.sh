@@ -187,7 +187,14 @@ installer_is_macos() {
     [[ "$OS" == "Darwin" ]]
 }
 
+prepare_gum_terminal() {
+    case "${TERM:-}" in
+        ""|dumb) export TERM="screen-256color" ;;
+    esac
+}
+
 installer_use_gum() {
+    prepare_gum_terminal
     [[ -n "$INSTALLER_GUM_ENABLED" ]] && return 0
     installer_has_interactive_terminal && installer_has_gum
 }
