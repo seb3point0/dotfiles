@@ -223,7 +223,8 @@ setup_cli_tools() {
         # oh-my-posh (no apt package)
         if ! has oh-my-posh; then
             info "Installing oh-my-posh..."
-            if curl -fsSL https://ohmyposh.dev/install.sh | bash -s; then
+            curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d "$HOME/.local/bin" >/dev/null 2>&1
+            if has oh-my-posh || [[ -x "$HOME/.local/bin/oh-my-posh" ]]; then
                 success "oh-my-posh installed"
             else
                 ERRORS+=("oh-my-posh install")
@@ -297,7 +298,7 @@ setup_zsh() {
         info "Oh My Zsh already installed"
     else
         info "Installing Oh My Zsh..."
-        if curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh -s -- --unattended; then
+        if curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh -s -- --unattended >/dev/null 2>&1; then
             success "Oh My Zsh installed"
         else
             ERRORS+=("Oh My Zsh install")
@@ -365,7 +366,8 @@ setup_python() {
             try brew install pyenv
         else
             info "Installing pyenv..."
-            if curl -fsSL https://pyenv.run | bash; then
+            curl -fsSL https://pyenv.run | bash >/dev/null 2>&1
+            if [[ -d "$HOME/.pyenv/bin" ]]; then
                 success "pyenv installed"
             else
                 ERRORS+=("pyenv install")
@@ -669,6 +671,10 @@ main() {
 
     collect_identity
     setup_package_manager
+    setup_symlinks
+    # Source .profile so PATH is set for the rest of the install
+    # (prevents warnings from oh-my-posh, pyenv about missing paths)
+    [ -f "$HOME/.profile" ] && . "$HOME/.profile"
     setup_cli_tools
     setup_zsh
     setup_tmux
@@ -676,7 +682,6 @@ main() {
     setup_git_identity
     setup_gpg
     setup_pass
-    setup_symlinks
     setup_post_install
 
     # ── Summary ──
