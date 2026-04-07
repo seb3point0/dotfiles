@@ -1,34 +1,133 @@
-# macOS
+# ─── macOS ─────────────────────────────────────────────────────
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
+.Spotlight-V100
+.Trashes
+Icon?
 
-# Editors
+# ─── Linux ─────────────────────────────────────────────────────
+*~
+.fuse_hidden*
+.Trash-*
+.nfs*
+.directory
+
+# ─── Windows ──────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ─── Editors ──────────────────────────────────────────────────
+# Vim / Neovim
 *.swp
 *.swo
-*~
+*.swn
+.netrwhist
+tags
+
+# JetBrains (IntelliJ, PyCharm, WebStorm, etc.)
 .idea/
+*.iml
+
+# VS Code
 .vscode/
+*.code-workspace
+
+# Sublime Text
 *.sublime-project
 *.sublime-workspace
 
-# Environment
-.env
-.env.local
-.env.*.local
+# Emacs
+*~
+\#*\#
+.#*
 
-# Python
+# ─── Environment / Secrets ────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# ─── Python ───────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+*.egg
+dist/
 .venv/
 venv/
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.cover
 
-# Node
+# ─── Node ─────────────────────────────────────────────────────
 node_modules/
+.npm
+.yarn/
+.pnp.*
+*.tsbuildinfo
+.next/
+.nuxt/
 
-# Build
+# ─── Go ───────────────────────────────────────────────────────
+vendor/
+
+# ─── Rust ─────────────────────────────────────────────────────
+target/
+
+# ─── Build / Compiled ─────────────────────────────────────────
 *.o
 *.so
 *.dylib
+*.dll
+*.exe
+*.out
+*.a
+*.lib
+*.class
+*.jar
+
+# ─── Terraform ────────────────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# ─── Docker ───────────────────────────────────────────────────
+.docker/
+
+# ─── Logs / Databases ────────────────────────────────────────
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# ─── Archives ─────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ─── OS / System ─────────────────────────────────────────────
+*.pid
+*.seed
+*.pid.lock
+core
