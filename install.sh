@@ -599,10 +599,12 @@ setup_symlinks() {
     done
 
     # Machine-specific overrides
-    if [[ ! -f "$HOME/.zshrc.local" ]]; then
-        touch "$HOME/.zshrc.local"
-        info "Created empty ~/.zshrc.local"
-    fi
+    for local_rc in .zshrc.local .bashrc.local; do
+        if [[ ! -f "$HOME/$local_rc" ]]; then
+            touch "$HOME/$local_rc"
+            info "Created empty ~/$local_rc"
+        fi
+    done
 }
 
 # ─── Post-install ──────────────────────────────────────────────────────────
@@ -666,7 +668,7 @@ main() {
     echo
     printf '  \033[1mNotes:\033[0m\n'
     printf '    Set your terminal font to a Nerd Font (e.g. MesloLGS NF)\n'
-    printf '    Machine-specific config goes in ~/.zshrc.local\n'
+    printf '    Machine-specific config goes in ~/.zshrc.local or ~/.bashrc.local\n'
     echo
 
     # Launch zsh so the user gets the configured prompt immediately
