@@ -25,7 +25,8 @@ source $ZSH/oh-my-zsh.sh
 # ─── Editor ────────────────────────────────────────────────────
 export EDITOR='nvim'
 
-# ─── bat as man pager ──────────────────────────────────────────
+# ─── bat (Debian/Ubuntu ships it as batcat) ──────────────────
+command -v bat >/dev/null 2>&1 || alias bat='batcat'
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 export MANROFFOPT="-c"
 
