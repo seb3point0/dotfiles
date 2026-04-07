@@ -213,7 +213,12 @@ setup_cli_tools() {
         # oh-my-posh (no apt package)
         if ! has oh-my-posh; then
             info "Installing oh-my-posh..."
-            try bash -c "$(curl -fsSL https://ohmyposh.dev/install.sh)" && success "oh-my-posh installed"
+            if curl -fsSL https://ohmyposh.dev/install.sh | bash -s; then
+                success "oh-my-posh installed"
+            else
+                ERRORS+=("oh-my-posh install")
+                warn "Failed: oh-my-posh install"
+            fi
         else
             info "oh-my-posh already installed"
         fi
