@@ -653,6 +653,12 @@ main() {
     printf '    Set your terminal font to a Nerd Font (e.g. MesloLGS NF)\n'
     printf '    Machine-specific config goes in ~/.zshrc.local\n'
     echo
+
+    # Launch zsh so the user gets the configured prompt immediately
+    if has zsh; then
+        info "Launching zsh..."
+        exec zsh -l
+    fi
 }
 
 main "$@"
