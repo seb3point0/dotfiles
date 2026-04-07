@@ -1,3 +1,9 @@
+# ─── Ensure login paths are loaded ─────────────────────────────
+# Handles non-login shells, manual source, and tmux panes
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  [[ -f ~/.zprofile ]] && source ~/.zprofile
+fi
+
 # ─── Oh My Zsh ─────────────────────────────────────────────────
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME=""
