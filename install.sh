@@ -37,12 +37,13 @@ PYENV_BUILD_DEPS=(make build-essential libssl-dev zlib1g-dev libbz2-dev
 PIP_PACKAGES=(virtualenv)
 
 SYMLINKS=(
+    "shell/.profile|.profile"
     "zsh/.zshrc|.zshrc"
     "zsh/.zprofile|.zprofile"
+    "bash/.bash_profile|.bash_profile"
     "tmux/.tmux.conf|.tmux.conf"
     "nvim|.config/nvim"
     "tmux/powerline|.config/tmux-powerline"
-    "bash/.bash_profile|.bash_profile"
     "git/.gitignore_global|.gitignore_global"
 )
 
