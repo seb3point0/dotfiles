@@ -1,0 +1,5 @@
+# ─── Shared logout ─────────────────────────────────────────────
+# Sourced by .zlogout and .bash_logout.
+
+# Clear terminal on logout
+clear

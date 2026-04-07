@@ -42,6 +42,8 @@ SYMLINKS=(
     "zsh/.zprofile|.zprofile"
     "bash/.bash_profile|.bash_profile"
     "bash/.bashrc|.bashrc"
+    "zsh/.zlogout|.zlogout"
+    "bash/.bash_logout|.bash_logout"
     "tmux/.tmux.conf|.tmux.conf"
     "nvim|.config/nvim"
     "tmux/powerline|.config/tmux-powerline"
