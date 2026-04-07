@@ -33,3 +33,14 @@ export FZF_DEFAULT_OPTS="
   --color=info:#EBCB8B,prompt:#81A1C1,pointer:#BF616A
   --color=marker:#A3BE8C,spinner:#B48EAD,header:#88C0D0
 "
+
+# ─── Auto-attach tmux ─────────────────────────────────────────
+# Attach to existing session or create one. Skips if already in
+# tmux, running in a non-interactive script, or inside VS Code.
+if command -v tmux >/dev/null 2>&1 \
+    && [ -z "${TMUX:-}" ] \
+    && [ -z "${VSCODE_RESOLVING_ENVIRONMENT:-}" ] \
+    && [ "$TERM_PROGRAM" != "vscode" ] \
+    && [ -t 0 ]; then
+  tmux attach-session 2>/dev/null || tmux new-session
+fi
