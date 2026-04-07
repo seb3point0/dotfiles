@@ -1,0 +1,177 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "palette": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "background": "p:nord0",
+          "foreground": "p:nord11",
+          "style": "plain",
+          "template": " ⚡",
+          "type": "root"
+        },
+        {
+          "background": "transparent",
+          "foreground": "p:nord4",
+          "options": {
+            "alpine": "",
+            "arch": "",
+            "centos": "",
+            "debian": "",
+            "elementary": "",
+            "fedora": "",
+            "gentoo": "",
+            "linux": "",
+            "macos": "",
+            "manjaro": "",
+            "mint": "",
+            "opensuse": "",
+            "raspbian": "",
+            "ubuntu": "",
+            "windows": ""
+          },
+          "style": "plain",
+          "template": " {{ if .WSL }}WSL at {{ end }}{{.Icon}} ",
+          "type": "os"
+        },
+        {
+          "background": "p:nord1",
+          "foreground": "p:nord14",
+          "leading_diamond": "",
+          "options": {
+            "style": "folder"
+          },
+          "style": "diamond",
+          "template": " {{ .Path }}",
+          "trailing_diamond": "",
+          "type": "path"
+        },
+        {
+          "background": "p:nord1",
+          "foreground": "p:nord7",
+          "options": {
+            "fetch_status": true
+          },
+          "style": "plain",
+          "template": "<p:nord3> </>{{ .HEAD }}{{ if .Staging.Changed }}<p:nord12>  {{ .Staging.String }}</>{{ end }}{{ if and (.Working.Changed) (.Staging.Changed) }} |{{ end }}{{ if .Working.Changed }}  {{ .Working.String }}{{ end }}{{ if gt .StashCount 0 }}  {{ .StashCount }}{{ end }} ",
+          "type": "git"
+        },
+        {
+          "background": "p:nord10",
+          "foreground": "p:nord13",
+          "leading_diamond": "",
+          "style": "diamond",
+          "template": " {{ if .Error }}{{ .Error }}{{ else }}{{ if .Venv }}{{ .Venv }} {{ end }}{{ .Full }}{{ end }}",
+          "trailing_diamond": " ",
+          "type": "python"
+        },
+        {
+          "background": "p:nord8",
+          "foreground": "p:nord0",
+          "leading_diamond": "",
+          "style": "diamond",
+          "template": " {{ if .Error }}{{ .Error }}{{ else }}{{ .Full }}{{ end }}",
+          "trailing_diamond": " ",
+          "type": "go"
+        },
+        {
+          "background": "p:nord3",
+          "foreground": "p:nord12",
+          "leading_diamond": "",
+          "style": "diamond",
+          "template": " {{.Profile}}{{if .Region}}@{{.Region}}{{end}}",
+          "trailing_diamond": " ",
+          "type": "aws"
+        },
+        {
+          "type": "terraform",
+          "style": "powerline",
+          "powerline_symbol": "",
+          "foreground": "p:nord0",
+          "background": "p:nord13",
+          "template": "{{.WorkspaceName}}"
+        },
+        {
+          "background": "p:nord9",
+          "foreground": "p:nord6",
+          "leading_diamond": "",
+          "style": "diamond",
+          "template": " {{.Context}}{{if .Namespace}} :: {{.Namespace}}{{end}}",
+          "trailing_diamond": "",
+          "type": "kubectl"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "right",
+      "segments": [
+        {
+          "options": {
+            "style": "roundrock",
+            "always_enabled": true
+          },
+          "style": "diamond",
+          "template": "{{ .FormattedMs }} ",
+          "type": "executiontime"
+        },
+        {
+          "background": "p:nord2",
+          "foreground": "p:nord4",
+          "style": "plain",
+          "template": " {{ round .PhysicalPercentUsed .Precision }}% ",
+          "type": "sysinfo"
+        },
+        {
+          "background": "p:nord11",
+          "background_templates": [
+            "{{if eq \"Charging\" .State.String}}p:nord14{{end}}",
+            "{{if eq \"Discharging\" .State.String}}p:nord13{{end}}",
+            "{{if eq \"Full\" .State.String}}p:nord14{{end}}"
+          ],
+          "foreground": "p:nord0",
+          "invert_powerline": true,
+          "leading_diamond": "",
+          "options": {
+            "charged_icon": " ",
+            "charging_icon": " ",
+            "discharging_icon": " "
+          },
+          "style": "plain",
+          "template": " {{ if not .Error }}{{ .Icon }}{{ .Percentage }}{{ end }}{{ .Error }} <p:nord0></>",
+          "type": "battery"
+        },
+        {
+          "background": "p:nord0",
+          "foreground": "p:nord14",
+          "style": "plain",
+          "template": "{{ .CurrentDate | date .Format }}",
+          "type": "time"
+        }
+      ],
+      "type": "rprompt"
+    }
+  ],
+  "final_space": true,
+  "pwd": "osc99",
+  "version": 4
+}

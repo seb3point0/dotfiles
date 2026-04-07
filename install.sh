@@ -1,0 +1,527 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# ============================================================================
+# dotfiles installer
+# Works on macOS (Homebrew) and Linux/Ubuntu (apt).
+# Safe to re-run — skips anything already present.
+#
+# Fresh install:  curl -fsSL https://raw.githubusercontent.com/seb3point0/dotfiles/main/install.sh | bash
+# From repo:      ~/.dotfiles/install.sh
+# ============================================================================
+
+DOTFILES_REPO="https://github.com/seb3point0/dotfiles.git"
+OS="$(uname -s)"
+ERRORS=()
+
+# ─── Packages ─────────────────────────────────────────────────────────────
+# Edit these lists to add/remove packages. The installer handles the rest.
+
+BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl)
+BREW_CASKS=(font-meslo-lg-nerd-font)
+BREW_TAPS=(jandedobbeleer/oh-my-posh)
+BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
+
+APT_PACKAGES=(git curl jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip)
+
+ZSH_PLUGINS=(
+    "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
+    "zsh-syntax-highlighting|https://github.com/zsh-users/zsh-syntax-highlighting"
+    "zsh-completions|https://github.com/zsh-users/zsh-completions"
+)
+
+PYENV_BUILD_DEPS=(make build-essential libssl-dev zlib1g-dev libbz2-dev
+    libreadline-dev libsqlite3-dev wget llvm libncursesw5-dev xz-utils
+    tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev)
+
+PIP_PACKAGES=(virtualenv)
+
+SYMLINKS=(
+    "zsh/.zshrc|.zshrc"
+    "zsh/.zprofile|.zprofile"
+    "tmux/.tmux.conf|.tmux.conf"
+    "nvim|.config/nvim"
+    "tmux/powerline|.config/tmux-powerline"
+)
+
+# ─── Helpers ───────────────────────────────────────────────────────────────
+
+info()    { printf '  \033[1;34m→\033[0m %s\n' "$*"; }
+success() { printf '  \033[1;32m✓\033[0m %s\n' "$*"; }
+warn()    { printf '  \033[1;33m!\033[0m %s\n' "$*" >&2; }
+section() { printf '\n\033[1m── %s ──\033[0m\n' "$*"; }
+
+has() { command -v "$1" &>/dev/null; }
+
+try() {
+    if ! "$@"; then
+        ERRORS+=("$*")
+        warn "Failed: $*"
+        return 1
+    fi
+}
+
+# ─── Bootstrap ─────────────────────────────────────────────────────────────
+# When piped via curl, clone the repo first then re-exec from disk.
+
+bootstrap() {
+    if [[ -f "${BASH_SOURCE[0]:-}" ]]; then
+        DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        return
+    fi
+
+    local dotfiles="$HOME/.dotfiles"
+
+    if ! has git; then
+        if [[ "$OS" == "Darwin" ]]; then
+            xcode-select --install 2>/dev/null || true
+        else
+            sudo apt-get update -y && sudo apt-get install -y git
+        fi
+    fi
+
+    if [[ -d "$dotfiles/.git" ]]; then
+        info "Dotfiles repo exists — pulling latest..."
+        git -C "$dotfiles" pull --ff-only
+    else
+        info "Cloning dotfiles..."
+        git clone "$DOTFILES_REPO" "$dotfiles"
+    fi
+
+    exec bash "$dotfiles/install.sh" "$@"
+}
+
+# ─── Self-update ───────────────────────────────────────────────────────────
+
+self_update() {
+    [[ -d "$DOTFILES/.git" ]] || return 0
+    git -C "$DOTFILES" remote get-url origin &>/dev/null || return 0
+
+    info "Checking for dotfiles updates..."
+    if ! git -C "$DOTFILES" fetch --quiet origin main 2>/dev/null; then
+        warn "Could not reach remote — running with local version"
+        return 0
+    fi
+
+    local local_sha remote_sha
+    local_sha="$(git -C "$DOTFILES" rev-parse HEAD)"
+    remote_sha="$(git -C "$DOTFILES" rev-parse origin/main 2>/dev/null || echo "$local_sha")"
+
+    if [[ "$local_sha" != "$remote_sha" ]]; then
+        info "Pulling latest dotfiles..."
+        git -C "$DOTFILES" pull --ff-only --quiet
+        info "Updated — re-running installer"
+        exec bash "$DOTFILES/install.sh" "$@"
+    fi
+
+    info "Dotfiles up to date"
+}
+
+# ─── Package manager ──────────────────────────────────────────────────────
+
+setup_package_manager() {
+    section "Package manager"
+    if [[ "$OS" == "Darwin" ]]; then
+        if has brew; then
+            info "Homebrew already installed"
+        else
+            info "Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"
+            success "Homebrew installed"
+        fi
+    else
+        info "Updating apt..."
+        sudo apt-get update -y
+        success "apt updated"
+    fi
+}
+
+# ─── CLI tools ─────────────────────────────────────────────────────────────
+
+setup_cli_tools() {
+    section "CLI tools"
+    if [[ "$OS" == "Darwin" ]]; then
+        local pkg
+        for pkg in "${BREW_PACKAGES[@]}"; do
+            if has "$pkg"; then
+                info "$pkg already installed"
+            else
+                info "Installing $pkg..."
+                try brew install "$pkg" && success "$pkg installed"
+            fi
+        done
+
+        # Taps + tap packages
+        local tap
+        for tap in "${BREW_TAPS[@]}"; do
+            brew tap "$tap" 2>/dev/null || true
+        done
+        for pkg in "${BREW_TAP_PACKAGES[@]}"; do
+            local bin="${pkg##*/}"
+            if has "$bin"; then
+                info "$bin already installed"
+            else
+                info "Installing $bin..."
+                try brew install "$pkg" && success "$bin installed"
+            fi
+        done
+
+        # Casks
+        local cask
+        for cask in "${BREW_CASKS[@]}"; do
+            if brew list --cask "$cask" &>/dev/null; then
+                info "$cask already installed"
+            else
+                info "Installing $cask..."
+                try brew install --cask "$cask" && success "$cask installed"
+            fi
+        done
+
+        # Docker Desktop (check binary, not just cask — may be installed outside brew)
+        if ! has docker; then
+            info "Installing Docker Desktop..."
+            try brew install --cask docker && success "Docker Desktop installed"
+        else
+            info "Docker already installed"
+        fi
+
+        # tmux-yank clipboard support
+        if ! has reattach-to-user-namespace; then
+            try brew install reattach-to-user-namespace
+        fi
+    else
+        # Ubuntu / Debian
+        local pkg
+        for pkg in "${APT_PACKAGES[@]}"; do
+            if dpkg -s "$pkg" &>/dev/null; then
+                info "$pkg already installed"
+            else
+                info "Installing $pkg..."
+                try sudo apt-get install -y "$pkg" && success "$pkg installed"
+            fi
+        done
+
+        # oh-my-posh (no apt package)
+        if ! has oh-my-posh; then
+            info "Installing oh-my-posh..."
+            try bash -c "$(curl -fsSL https://ohmyposh.dev/install.sh)" && success "oh-my-posh installed"
+        else
+            info "oh-my-posh already installed"
+        fi
+
+        # Nerd Font (no apt package)
+        local font_dir="$HOME/.local/share/fonts"
+        if ls "$font_dir"/Meslo* &>/dev/null 2>&1; then
+            info "Meslo Nerd Font already installed"
+        else
+            info "Installing Meslo Nerd Font..."
+            mkdir -p "$font_dir"
+            if curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Meslo.tar.xz" | tar -xJ -C "$font_dir"; then
+                fc-cache -f "$font_dir"
+                success "Meslo Nerd Font installed"
+            else
+                warn "Nerd Font download failed — install manually"
+            fi
+        fi
+
+        # kubectl (needs its own repo)
+        if ! has kubectl; then
+            info "Installing kubectl..."
+            sudo mkdir -p /etc/apt/keyrings
+            curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg 2>/dev/null
+            echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
+            sudo apt-get update -y
+            try sudo apt-get install -y kubectl && success "kubectl installed"
+        else
+            info "kubectl already installed"
+        fi
+
+        # Docker
+        if ! has docker; then
+            info "Installing Docker..."
+            if curl -fsSL https://get.docker.com | sh; then
+                sudo usermod -aG docker "$USER" 2>/dev/null || true
+                success "Docker installed (log out and back in for group change)"
+            else
+                warn "Docker install failed — install manually"
+            fi
+        else
+            info "Docker already installed"
+        fi
+    fi
+}
+
+# ─── Zsh ───────────────────────────────────────────────────────────────────
+
+setup_zsh() {
+    section "Zsh"
+
+    if ! has zsh; then
+        if [[ "$OS" == "Darwin" ]]; then
+            try brew install zsh
+        else
+            try sudo apt-get install -y zsh
+        fi
+    else
+        info "zsh already installed"
+    fi
+
+    # Oh My Zsh
+    if [[ -d "$HOME/.oh-my-zsh" ]]; then
+        info "Oh My Zsh already installed"
+    else
+        info "Installing Oh My Zsh..."
+        try sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        success "Oh My Zsh installed"
+    fi
+
+    # Plugins
+    local custom="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+    local entry name url
+    for entry in "${ZSH_PLUGINS[@]}"; do
+        name="${entry%%|*}"
+        url="${entry##*|}"
+        if [[ -d "$custom/plugins/$name" ]]; then
+            info "$name already installed"
+        else
+            info "Installing $name..."
+            try git clone --depth=1 "$url" "$custom/plugins/$name" && success "$name installed"
+        fi
+    done
+
+    # Default shell
+    local zsh_path
+    zsh_path="$(command -v zsh)"
+    if [[ "$SHELL" != *zsh* ]]; then
+        info "Setting zsh as default shell..."
+        if ! grep -qxF "$zsh_path" /etc/shells 2>/dev/null; then
+            echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+        fi
+        try chsh -s "$zsh_path" && success "Default shell set to zsh"
+    else
+        info "zsh is already the default shell"
+    fi
+}
+
+# ─── Tmux ──────────────────────────────────────────────────────────────────
+
+setup_tmux() {
+    section "Tmux"
+
+    # TPM
+    if [[ -d "$HOME/.tmux/plugins/tpm" ]]; then
+        info "TPM already installed"
+    else
+        info "Installing TPM..."
+        try git clone --depth=1 https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
+        success "TPM installed"
+    fi
+}
+
+# ─── Python ────────────────────────────────────────────────────────────────
+
+setup_python() {
+    section "Python"
+
+    # Build deps (Linux)
+    if [[ "$OS" == "Linux" ]]; then
+        info "Installing pyenv build dependencies..."
+        sudo apt-get install -y "${PYENV_BUILD_DEPS[@]}" 2>/dev/null || warn "Some build deps failed"
+    fi
+
+    # pyenv
+    if ! has pyenv; then
+        if [[ "$OS" == "Darwin" ]]; then
+            try brew install pyenv
+        else
+            info "Installing pyenv..."
+            try bash -c "$(curl -fsSL https://pyenv.run)" && success "pyenv installed"
+        fi
+    else
+        info "pyenv already installed"
+    fi
+
+    # Initialize for this script
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+
+    if ! has pyenv; then
+        warn "pyenv not available — skipping Python install"
+        return 0
+    fi
+
+    # Latest stable Python 3
+    local latest
+    latest="$(pyenv install --list 2>/dev/null | grep -E '^\s+3\.[0-9]+\.[0-9]+$' | tail -1 | tr -d ' ')"
+    if [[ -z "$latest" ]]; then
+        warn "Could not determine latest Python version"
+        return 0
+    fi
+
+    if pyenv versions --bare | grep -qF "$latest"; then
+        info "Python $latest already installed"
+    else
+        info "Installing Python $latest (this takes a few minutes)..."
+        try pyenv install "$latest" && success "Python $latest installed"
+    fi
+    pyenv global "$latest"
+
+    # pip packages
+    info "Upgrading pip..."
+    pip install --upgrade pip 2>/dev/null || true
+    local pkg
+    for pkg in "${PIP_PACKAGES[@]}"; do
+        if pip show "$pkg" &>/dev/null; then
+            info "$pkg already installed"
+        else
+            info "Installing $pkg..."
+            try pip install "$pkg" && success "$pkg installed"
+        fi
+    done
+}
+
+# ─── Git identity ─────────────────────────────────────────────────────────
+
+setup_git_identity() {
+    section "Git identity"
+
+    local git_name git_email
+    git_name="$(git config --global --get user.name 2>/dev/null || true)"
+    git_email="$(git config --global --get user.email 2>/dev/null || true)"
+
+    if [[ -n "$git_name" && -n "$git_email" ]]; then
+        info "Git identity: $git_name <$git_email>"
+        return
+    fi
+
+    if [[ ! -t 0 ]]; then
+        warn "Git user.name or user.email not set — run 'git config --global' after install"
+        return
+    fi
+
+    if [[ -z "$git_name" ]]; then
+        read -r -p "  Git user.name: " git_name
+        if [[ -n "$git_name" ]]; then
+            git config --global user.name "$git_name"
+            success "Set git user.name to '$git_name'"
+        else
+            warn "Skipped git user.name"
+        fi
+    else
+        info "Git user.name: $git_name"
+    fi
+
+    if [[ -z "$git_email" ]]; then
+        read -r -p "  Git user.email: " git_email
+        if [[ -n "$git_email" ]]; then
+            git config --global user.email "$git_email"
+            success "Set git user.email to '$git_email'"
+        else
+            warn "Skipped git user.email"
+        fi
+    else
+        info "Git user.email: $git_email"
+    fi
+}
+
+# ─── Symlinks ─────────────────────────────────────────────────────────────
+
+setup_symlinks() {
+    section "Symlinks"
+    mkdir -p "$HOME/.config"
+
+    local entry src dst
+    for entry in "${SYMLINKS[@]}"; do
+        src="$DOTFILES/${entry%%|*}"
+        dst="$HOME/${entry##*|}"
+
+        # Ensure parent dir exists
+        mkdir -p "$(dirname "$dst")"
+
+        if [[ -L "$dst" ]]; then
+            local current
+            current="$(readlink "$dst")"
+            if [[ "$current" == "$src" ]]; then
+                info "$dst already linked"
+                continue
+            fi
+            rm "$dst"
+        elif [[ -e "$dst" ]]; then
+            warn "Backing up $dst → $dst.bak"
+            mv "$dst" "$dst.bak"
+        fi
+        ln -sf "$src" "$dst"
+        success "$dst → $src"
+    done
+
+    # Machine-specific overrides
+    if [[ ! -f "$HOME/.zshrc.local" ]]; then
+        touch "$HOME/.zshrc.local"
+        info "Created empty ~/.zshrc.local"
+    fi
+}
+
+# ─── Post-install ──────────────────────────────────────────────────────────
+
+setup_post_install() {
+    section "Post-install"
+
+    # Install tmux plugins via TPM
+    if [[ -x "$HOME/.tmux/plugins/tpm/bin/install_plugins" ]]; then
+        info "Installing tmux plugins..."
+        try "$HOME/.tmux/plugins/tpm/bin/install_plugins" && success "Tmux plugins installed"
+    fi
+
+    # Install nvim plugins via lazy.nvim
+    if has nvim; then
+        info "Installing nvim plugins..."
+        try nvim --headless "+Lazy! sync" +qa 2>/dev/null && success "Nvim plugins installed"
+    fi
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+main() {
+    bootstrap "$@"
+
+    printf '\033[1;36m'
+    printf '  ┌──────────────────────────┐\n'
+    printf '  │     dotfiles installer    │\n'
+    printf '  └──────────────────────────┘\n'
+    printf '\033[0m'
+    printf '  OS: %s | Dotfiles: %s\n' "$OS" "$DOTFILES"
+
+    self_update "$@"
+
+    setup_package_manager
+    setup_cli_tools
+    setup_zsh
+    setup_tmux
+    setup_python
+    setup_git_identity
+    setup_symlinks
+    setup_post_install
+
+    # ── Summary ──
+    echo
+    if [[ ${#ERRORS[@]} -gt 0 ]]; then
+        printf '  \033[1;33mDone with %d warning(s):\033[0m\n' "${#ERRORS[@]}"
+        local err
+        for err in "${ERRORS[@]}"; do
+            printf '    \033[1;31m✗\033[0m %s\n' "$err"
+        done
+    else
+        printf '  \033[1;32mDone — no errors.\033[0m\n'
+    fi
+
+    echo
+    printf '  \033[1mNotes:\033[0m\n'
+    printf '    Set your terminal font to a Nerd Font (e.g. MesloLGS NF)\n'
+    printf '    Machine-specific config goes in ~/.zshrc.local\n'
+    echo
+}
+
+main "$@"
