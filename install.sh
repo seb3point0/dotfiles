@@ -429,11 +429,23 @@ collect_identity() {
         existing_key="$(gpg --list-secret-keys --keyid-format LONG "$USER_EMAIL" 2>/dev/null || true)"
         if [[ -z "$existing_key" ]]; then
             info "No GPG key found for $USER_EMAIL — will create one"
-            read -r -s -p "  GPG passphrase (for new key): " GPG_PASSPHRASE < /dev/tty
-            echo
-            if [[ -z "$GPG_PASSPHRASE" ]]; then
-                warn "Empty passphrase — GPG key will not be created"
-            fi
+            local confirm=""
+            while true; do
+                read -r -s -p "  GPG passphrase (for new key): " GPG_PASSPHRASE < /dev/tty
+                echo
+                read -r -s -p "  Confirm passphrase: " confirm < /dev/tty
+                echo
+                if [[ -z "$GPG_PASSPHRASE" ]]; then
+                    warn "Empty passphrase — GPG key will not be created"
+                    break
+                elif [[ "$GPG_PASSPHRASE" == "$confirm" ]]; then
+                    success "Passphrase confirmed"
+                    break
+                else
+                    warn "Passphrases do not match — try again"
+                    GPG_PASSPHRASE=""
+                fi
+            done
         fi
     fi
 }
