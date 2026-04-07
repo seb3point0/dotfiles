@@ -264,6 +264,7 @@ setup_cli_tools() {
             info "oh-my-posh already installed"
         else
             info "Installing oh-my-posh..."
+            mkdir -p "$HOME/.local/bin"
             if run_piped "oh-my-posh" "https://ohmyposh.dev/install.sh" -s -- -d "$HOME/.local/bin"; then
                 # Ensure it's on PATH for the rest of this script
                 export PATH="$HOME/.local/bin:$PATH"
@@ -713,12 +714,12 @@ main() {
 
     collect_identity
     setup_package_manager
+    setup_zsh
     setup_symlinks
     # Source .profile so PATH is set for the rest of the install
     # (prevents warnings from oh-my-posh, pyenv about missing paths)
     [ -f "$HOME/.profile" ] && . "$HOME/.profile"
     setup_cli_tools
-    setup_zsh
     setup_tmux
     setup_python
     setup_git_identity
