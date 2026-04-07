@@ -22,7 +22,7 @@ BREW_CASKS=(font-meslo-lg-nerd-font)
 BREW_TAPS=(jandedobbeleer/oh-my-posh)
 BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
 
-APT_PACKAGES=(git curl jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass)
+APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass)
 
 ZSH_PLUGINS=(
     "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
@@ -411,25 +411,25 @@ collect_identity() {
 
     if [[ -n "$USER_FULLNAME" && -n "$USER_EMAIL" ]]; then
         info "Identity: $USER_FULLNAME <$USER_EMAIL>"
-    elif [[ -t 0 ]]; then
+    elif [[ -r /dev/tty ]]; then
         if [[ -z "$USER_FULLNAME" ]]; then
-            read -r -p "  Full name: " USER_FULLNAME
+            read -r -p "  Full name: " USER_FULLNAME < /dev/tty
         fi
         if [[ -z "$USER_EMAIL" ]]; then
-            read -r -p "  Email: " USER_EMAIL
+            read -r -p "  Email: " USER_EMAIL < /dev/tty
         fi
     else
-        warn "No identity set and running non-interactively — skipping"
+        warn "No identity set and no terminal available — skipping"
         return
     fi
 
     # Ask for GPG passphrase if we'll need to create a key
-    if [[ -z "$GPG_PASSPHRASE" ]] && [[ -t 0 ]]; then
+    if [[ -z "$GPG_PASSPHRASE" && -n "$USER_EMAIL" && -r /dev/tty ]]; then
         local existing_key
         existing_key="$(gpg --list-secret-keys --keyid-format LONG "$USER_EMAIL" 2>/dev/null || true)"
         if [[ -z "$existing_key" ]]; then
             info "No GPG key found for $USER_EMAIL — will create one"
-            read -r -s -p "  GPG passphrase (for new key): " GPG_PASSPHRASE
+            read -r -s -p "  GPG passphrase (for new key): " GPG_PASSPHRASE < /dev/tty
             echo
             if [[ -z "$GPG_PASSPHRASE" ]]; then
                 warn "Empty passphrase — GPG key will not be created"
