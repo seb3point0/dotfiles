@@ -17,12 +17,12 @@ ERRORS=()
 # ─── Packages ─────────────────────────────────────────────────────────────
 # Edit these lists to add/remove packages. The installer handles the rest.
 
-BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl)
+BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl pass)
 BREW_CASKS=(font-meslo-lg-nerd-font)
 BREW_TAPS=(jandedobbeleer/oh-my-posh)
 BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
 
-APT_PACKAGES=(git curl jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip)
+APT_PACKAGES=(git curl jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass)
 
 ZSH_PLUGINS=(
     "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
@@ -42,6 +42,7 @@ SYMLINKS=(
     "tmux/.tmux.conf|.tmux.conf"
     "nvim|.config/nvim"
     "tmux/powerline|.config/tmux-powerline"
+    "git/.gitignore_global|.gitignore_global"
 )
 
 # ─── Helpers ───────────────────────────────────────────────────────────────
@@ -124,6 +125,11 @@ setup_package_manager() {
     if [[ "$OS" == "Darwin" ]]; then
         if has brew; then
             info "Homebrew already installed"
+            info "Updating Homebrew..."
+            brew update
+            info "Upgrading packages..."
+            brew upgrade
+            success "Homebrew up to date"
         else
             info "Installing Homebrew..."
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -133,7 +139,9 @@ setup_package_manager() {
     else
         info "Updating apt..."
         sudo apt-get update -y
-        success "apt updated"
+        info "Upgrading packages..."
+        sudo apt-get upgrade -y
+        success "System packages up to date"
     fi
 }
 
@@ -423,6 +431,45 @@ setup_git_identity() {
     else
         info "Git user.email: $git_email"
     fi
+
+    # Global gitignore
+    git config --global core.excludesFile "$HOME/.gitignore_global"
+    info "Global gitignore set"
+}
+
+# ─── GPG agent ─────────────────────────────────────────────────────────────
+
+setup_gpg() {
+    section "GPG agent"
+    mkdir -p "$HOME/.gnupg"
+    chmod 700 "$HOME/.gnupg"
+
+    # Install pinentry per platform
+    local pinentry=""
+    if [[ "$OS" == "Darwin" ]]; then
+        if ! has pinentry-mac; then
+            info "Installing pinentry-mac..."
+            try brew install pinentry-mac
+        fi
+        pinentry="$(command -v pinentry-mac 2>/dev/null || echo "/opt/homebrew/bin/pinentry-mac")"
+    else
+        if has pinentry-curses; then
+            pinentry="$(command -v pinentry-curses)"
+        fi
+    fi
+
+    # Generate gpg-agent.conf from dotfiles base + platform pinentry
+    local conf="$HOME/.gnupg/gpg-agent.conf"
+    cp "$DOTFILES/gnupg/gpg-agent.conf" "$conf"
+    if [[ -n "$pinentry" ]]; then
+        echo "pinentry-program $pinentry" >> "$conf"
+        success "Pinentry: $pinentry"
+    fi
+    chmod 600 "$conf"
+
+    # Restart agent to pick up changes
+    gpgconf --kill gpg-agent 2>/dev/null || true
+    info "GPG agent configured"
 }
 
 # ─── Symlinks ─────────────────────────────────────────────────────────────
@@ -502,6 +549,7 @@ main() {
     setup_tmux
     setup_python
     setup_git_identity
+    setup_gpg
     setup_symlinks
     setup_post_install
 
