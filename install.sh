@@ -573,7 +573,8 @@ setup_symlinks() {
                 info "$dst already linked"
                 continue
             fi
-            rm "$dst"
+            warn "Backing up $dst → $dst.bak"
+            mv "$dst" "$dst.bak"
         elif [[ -e "$dst" ]]; then
             warn "Backing up $dst → $dst.bak"
             mv "$dst" "$dst.bak"
