@@ -22,7 +22,7 @@ BREW_CASKS=(font-meslo-lg-nerd-font)
 BREW_TAPS=(jandedobbeleer/oh-my-posh)
 BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
 
-APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass)
+APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass gnupg)
 
 ZSH_PLUGINS=(
     "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
@@ -134,10 +134,9 @@ setup_package_manager() {
         if has brew; then
             info "Homebrew already installed"
             info "Updating Homebrew..."
-            brew update
+            try brew update && success "Homebrew updated"
             info "Upgrading packages..."
-            brew upgrade
-            success "Homebrew up to date"
+            try brew upgrade && success "Packages upgraded"
         else
             info "Installing Homebrew..."
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -148,7 +147,7 @@ setup_package_manager() {
         info "Updating apt..."
         sudo apt-get update -y
         info "Upgrading packages..."
-        sudo apt-get upgrade -y
+        sudo apt-get upgrade -y || warn "Some packages failed to upgrade"
         success "System packages up to date"
     fi
 }
@@ -203,8 +202,11 @@ setup_cli_tools() {
         fi
 
         # tmux-yank clipboard support
-        if ! has reattach-to-user-namespace; then
-            try brew install reattach-to-user-namespace
+        if has reattach-to-user-namespace; then
+            info "reattach-to-user-namespace already installed"
+        else
+            info "Installing reattach-to-user-namespace..."
+            try brew install reattach-to-user-namespace && success "reattach-to-user-namespace installed"
         fi
     else
         # Ubuntu / Debian
@@ -242,7 +244,8 @@ setup_cli_tools() {
                 fc-cache -f "$font_dir"
                 success "Meslo Nerd Font installed"
             else
-                warn "Nerd Font download failed — install manually"
+                ERRORS+=("Meslo Nerd Font install")
+                warn "Failed: Nerd Font download — install manually"
             fi
         fi
 
@@ -265,7 +268,8 @@ setup_cli_tools() {
                 sudo usermod -aG docker "$USER" 2>/dev/null || true
                 success "Docker installed (log out and back in for group change)"
             else
-                warn "Docker install failed — install manually"
+                ERRORS+=("Docker install")
+                warn "Failed: Docker install — install manually"
             fi
         else
             info "Docker already installed"
@@ -293,8 +297,12 @@ setup_zsh() {
         info "Oh My Zsh already installed"
     else
         info "Installing Oh My Zsh..."
-        try sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-        success "Oh My Zsh installed"
+        if curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh -s -- --unattended; then
+            success "Oh My Zsh installed"
+        else
+            ERRORS+=("Oh My Zsh install")
+            warn "Failed: Oh My Zsh install"
+        fi
     fi
 
     # Plugins
@@ -357,7 +365,12 @@ setup_python() {
             try brew install pyenv
         else
             info "Installing pyenv..."
-            try bash -c "$(curl -fsSL https://pyenv.run)" && success "pyenv installed"
+            if curl -fsSL https://pyenv.run | bash; then
+                success "pyenv installed"
+            else
+                ERRORS+=("pyenv install")
+                warn "Failed: pyenv install"
+            fi
         fi
     else
         info "pyenv already installed"
@@ -482,7 +495,9 @@ setup_gpg() {
     # Install pinentry per platform
     local pinentry=""
     if [[ "$OS" == "Darwin" ]]; then
-        if ! has pinentry-mac; then
+        if has pinentry-mac; then
+            info "pinentry-mac already installed"
+        else
             info "Installing pinentry-mac..."
             try brew install pinentry-mac
         fi
@@ -513,7 +528,7 @@ setup_gpg() {
             info "GPG key already exists for $USER_EMAIL"
         elif [[ -n "$GPG_PASSPHRASE" ]]; then
             info "Generating GPG key for $USER_FULLNAME <$USER_EMAIL>..."
-            gpg --batch --gen-key <<GPGEOF
+            if gpg --batch --gen-key <<GPGEOF
 Key-Type: RSA
 Key-Length: 4096
 Subkey-Type: RSA
@@ -524,11 +539,19 @@ Expire-Date: 0
 Passphrase: $GPG_PASSPHRASE
 %commit
 GPGEOF
-            success "GPG key generated"
+            then
+                success "GPG key generated"
+            else
+                ERRORS+=("GPG key generation")
+                warn "Failed: GPG key generation"
+            fi
         else
             info "No passphrase provided — skipping GPG key generation"
         fi
     fi
+
+    # Clear passphrase from memory
+    GPG_PASSPHRASE=""
 
     info "GPG configured"
 }
@@ -588,11 +611,14 @@ setup_symlinks() {
                 info "$dst already linked"
                 continue
             fi
-            warn "Backing up $dst → $dst.bak"
-            mv "$dst" "$dst.bak"
+            # Timestamped backup so repeated runs don't overwrite
+            local bak="$dst.bak.$(date +%Y%m%d%H%M%S)"
+            warn "Backing up $dst → $bak"
+            mv "$dst" "$bak"
         elif [[ -e "$dst" ]]; then
-            warn "Backing up $dst → $dst.bak"
-            mv "$dst" "$dst.bak"
+            local bak="$dst.bak.$(date +%Y%m%d%H%M%S)"
+            warn "Backing up $dst → $bak"
+            mv "$dst" "$bak"
         fi
         ln -sf "$src" "$dst"
         success "$dst → $src"
