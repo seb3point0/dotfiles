@@ -13,6 +13,7 @@ set -uo pipefail
 DOTFILES_REPO="https://github.com/seb3point0/dotfiles.git"
 OS="$(uname -s)"
 ERRORS=()
+LOG_FILE=""
 
 # ─── Packages ─────────────────────────────────────────────────────────────
 # Edit these lists to add/remove packages. The installer handles the rest.
@@ -52,12 +53,48 @@ SYMLINKS=(
 
 # ─── Helpers ───────────────────────────────────────────────────────────────
 
-info()    { printf '  \033[1;34m→\033[0m %s\n' "$*"; }
-success() { printf '  \033[1;32m✓\033[0m %s\n' "$*"; }
-warn()    { printf '  \033[1;33m!\033[0m %s\n' "$*" >&2; }
-section() { printf '\n\033[1m── %s ──\033[0m\n' "$*"; }
+setup_logging() {
+    local log_dir="$HOME/.dotfiles/logs"
+    mkdir -p "$log_dir"
+    LOG_FILE="$log_dir/install-$(date +%Y%m%d-%H%M%S).log"
+    : > "$LOG_FILE"
+    # Clean up logs older than 30 days
+    find "$log_dir" -name "install-*.log" -mtime +30 -delete 2>/dev/null || true
+}
+
+log()     { [[ -n "$LOG_FILE" ]] && printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG_FILE"; }
+info()    { printf '  \033[1;34m→\033[0m %s\n' "$*"; log "INFO  $*"; }
+success() { printf '  \033[1;32m✓\033[0m %s\n' "$*"; log "OK    $*"; }
+warn()    { printf '  \033[1;33m!\033[0m %s\n' "$*" >&2; log "WARN  $*"; }
+section() { printf '\n\033[1m── %s ──\033[0m\n' "$*"; log "===== $* ====="; }
 
 has() { command -v "$1" &>/dev/null; }
+
+# Run a command, logging full output. Only show our own messages to the user.
+run_quiet() {
+    local label="$1"; shift
+    log "RUN   $label: $*"
+    if "$@" >> "$LOG_FILE" 2>&1; then
+        log "OK    $label"
+        return 0
+    else
+        log "FAIL  $label (exit $?)"
+        return 1
+    fi
+}
+
+# Run a piped install (curl | bash), logging output.
+run_piped() {
+    local label="$1" url="$2"; shift 2
+    log "RUN   $label: curl $url | bash $*"
+    if curl -fsSL "$url" | bash "$@" >> "$LOG_FILE" 2>&1; then
+        log "OK    $label"
+        return 0
+    else
+        log "FAIL  $label (exit $?)"
+        return 1
+    fi
+}
 
 # User identity — collected once, used by git + gpg + pass
 USER_FULLNAME=""
@@ -223,17 +260,18 @@ setup_cli_tools() {
         done
 
         # oh-my-posh (no apt package)
-        if ! has oh-my-posh; then
+        if has oh-my-posh || [[ -x "$HOME/.local/bin/oh-my-posh" ]]; then
+            info "oh-my-posh already installed"
+        else
             info "Installing oh-my-posh..."
-            curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d "$HOME/.local/bin" >/dev/null 2>&1
-            if has oh-my-posh || [[ -x "$HOME/.local/bin/oh-my-posh" ]]; then
+            if run_piped "oh-my-posh" "https://ohmyposh.dev/install.sh" -s -- -d "$HOME/.local/bin"; then
+                # Ensure it's on PATH for the rest of this script
+                export PATH="$HOME/.local/bin:$PATH"
                 success "oh-my-posh installed"
             else
                 ERRORS+=("oh-my-posh install")
-                warn "Failed: oh-my-posh install"
+                warn "Failed: oh-my-posh install — see $LOG_FILE"
             fi
-        else
-            info "oh-my-posh already installed"
         fi
 
         # Nerd Font (no apt package)
@@ -300,11 +338,11 @@ setup_zsh() {
         info "Oh My Zsh already installed"
     else
         info "Installing Oh My Zsh..."
-        if curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh -s -- --unattended >/dev/null 2>&1; then
+        if run_piped "Oh My Zsh" "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" -s -- --unattended; then
             success "Oh My Zsh installed"
         else
             ERRORS+=("Oh My Zsh install")
-            warn "Failed: Oh My Zsh install"
+            warn "Failed: Oh My Zsh install — see $LOG_FILE"
         fi
     fi
 
@@ -368,12 +406,12 @@ setup_python() {
             try brew install pyenv
         else
             info "Installing pyenv..."
-            curl -fsSL https://pyenv.run | bash >/dev/null 2>&1
+            run_piped "pyenv" "https://pyenv.run"
             if [[ -d "$HOME/.pyenv/bin" ]]; then
                 success "pyenv installed"
             else
                 ERRORS+=("pyenv install")
-                warn "Failed: pyenv install"
+                warn "Failed: pyenv install — see $LOG_FILE"
             fi
         fi
     else
@@ -661,6 +699,7 @@ setup_post_install() {
 
 main() {
     bootstrap "$@"
+    setup_logging
 
     printf '\033[1;36m'
     printf '  ┌──────────────────────────┐\n'
@@ -668,6 +707,7 @@ main() {
     printf '  └──────────────────────────┘\n'
     printf '\033[0m'
     printf '  OS: %s | Dotfiles: %s\n' "$OS" "$DOTFILES"
+    log "OS: $OS | Dotfiles: $DOTFILES"
 
     self_update "$@"
 
@@ -702,6 +742,7 @@ main() {
     printf '  \033[1mNotes:\033[0m\n'
     printf '    Set your terminal font to a Nerd Font (e.g. MesloLGS NF)\n'
     printf '    Machine-specific config goes in ~/.zshrc.local or ~/.bashrc.local\n'
+    printf '    Full log: %s\n' "$LOG_FILE"
     echo
 
     # Launch zsh so the user gets the configured prompt immediately
