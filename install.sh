@@ -54,6 +54,11 @@ section() { printf '\n\033[1m── %s ──\033[0m\n' "$*"; }
 
 has() { command -v "$1" &>/dev/null; }
 
+# User identity — collected once, used by git + gpg + pass
+USER_FULLNAME=""
+USER_EMAIL=""
+GPG_PASSPHRASE=""
+
 try() {
     if ! "$@"; then
         ERRORS+=("$*")
@@ -394,58 +399,68 @@ setup_python() {
     done
 }
 
+# ─── Identity ─────────────────────────────────────────────────────────────
+# Collect name, email, and GPG passphrase once. Used by git, gpg, and pass.
+
+collect_identity() {
+    section "Identity"
+
+    # Try to pull existing values
+    USER_FULLNAME="$(git config --global --get user.name 2>/dev/null || true)"
+    USER_EMAIL="$(git config --global --get user.email 2>/dev/null || true)"
+
+    if [[ -n "$USER_FULLNAME" && -n "$USER_EMAIL" ]]; then
+        info "Identity: $USER_FULLNAME <$USER_EMAIL>"
+    elif [[ -t 0 ]]; then
+        if [[ -z "$USER_FULLNAME" ]]; then
+            read -r -p "  Full name: " USER_FULLNAME
+        fi
+        if [[ -z "$USER_EMAIL" ]]; then
+            read -r -p "  Email: " USER_EMAIL
+        fi
+    else
+        warn "No identity set and running non-interactively — skipping"
+        return
+    fi
+
+    # Ask for GPG passphrase if we'll need to create a key
+    if [[ -z "$GPG_PASSPHRASE" ]] && [[ -t 0 ]]; then
+        local existing_key
+        existing_key="$(gpg --list-secret-keys --keyid-format LONG "$USER_EMAIL" 2>/dev/null || true)"
+        if [[ -z "$existing_key" ]]; then
+            info "No GPG key found for $USER_EMAIL — will create one"
+            read -r -s -p "  GPG passphrase (for new key): " GPG_PASSPHRASE
+            echo
+            if [[ -z "$GPG_PASSPHRASE" ]]; then
+                warn "Empty passphrase — GPG key will not be created"
+            fi
+        fi
+    fi
+}
+
 # ─── Git identity ─────────────────────────────────────────────────────────
 
 setup_git_identity() {
     section "Git identity"
 
-    local git_name git_email
-    git_name="$(git config --global --get user.name 2>/dev/null || true)"
-    git_email="$(git config --global --get user.email 2>/dev/null || true)"
-
-    if [[ -n "$git_name" && -n "$git_email" ]]; then
-        info "Git identity: $git_name <$git_email>"
+    if [[ -z "$USER_FULLNAME" || -z "$USER_EMAIL" ]]; then
+        warn "No identity collected — skipping git config"
         return
     fi
 
-    if [[ ! -t 0 ]]; then
-        warn "Git user.name or user.email not set — run 'git config --global' after install"
-        return
-    fi
-
-    if [[ -z "$git_name" ]]; then
-        read -r -p "  Git user.name: " git_name
-        if [[ -n "$git_name" ]]; then
-            git config --global user.name "$git_name"
-            success "Set git user.name to '$git_name'"
-        else
-            warn "Skipped git user.name"
-        fi
-    else
-        info "Git user.name: $git_name"
-    fi
-
-    if [[ -z "$git_email" ]]; then
-        read -r -p "  Git user.email: " git_email
-        if [[ -n "$git_email" ]]; then
-            git config --global user.email "$git_email"
-            success "Set git user.email to '$git_email'"
-        else
-            warn "Skipped git user.email"
-        fi
-    else
-        info "Git user.email: $git_email"
-    fi
+    git config --global user.name "$USER_FULLNAME"
+    git config --global user.email "$USER_EMAIL"
+    info "Git identity: $USER_FULLNAME <$USER_EMAIL>"
 
     # Global gitignore
     git config --global core.excludesFile "$HOME/.gitignore_global"
     info "Global gitignore set"
 }
 
-# ─── GPG agent ─────────────────────────────────────────────────────────────
+# ─── GPG ───────────────────────────────────────────────────────────────────
 
 setup_gpg() {
-    section "GPG agent"
+    section "GPG"
     mkdir -p "$HOME/.gnupg"
     chmod 700 "$HOME/.gnupg"
 
@@ -474,7 +489,67 @@ setup_gpg() {
 
     # Restart agent to pick up changes
     gpgconf --kill gpg-agent 2>/dev/null || true
-    info "GPG agent configured"
+
+    # Generate GPG key if none exists for this email
+    if [[ -n "$USER_EMAIL" ]]; then
+        local existing_key
+        existing_key="$(gpg --list-secret-keys --keyid-format LONG "$USER_EMAIL" 2>/dev/null || true)"
+        if [[ -n "$existing_key" ]]; then
+            info "GPG key already exists for $USER_EMAIL"
+        elif [[ -n "$GPG_PASSPHRASE" ]]; then
+            info "Generating GPG key for $USER_FULLNAME <$USER_EMAIL>..."
+            gpg --batch --gen-key <<GPGEOF
+Key-Type: RSA
+Key-Length: 4096
+Subkey-Type: RSA
+Subkey-Length: 4096
+Name-Real: $USER_FULLNAME
+Name-Email: $USER_EMAIL
+Expire-Date: 0
+Passphrase: $GPG_PASSPHRASE
+%commit
+GPGEOF
+            success "GPG key generated"
+        else
+            info "No passphrase provided — skipping GPG key generation"
+        fi
+    fi
+
+    info "GPG configured"
+}
+
+# ─── Pass ──────────────────────────────────────────────────────────────────
+
+setup_pass() {
+    section "Password store"
+
+    if [[ -z "$USER_EMAIL" ]]; then
+        warn "No email set — skipping pass init"
+        return
+    fi
+
+    if ! has pass; then
+        warn "pass not installed — skipping"
+        return
+    fi
+
+    # Check if pass is already initialized
+    if [[ -d "$HOME/.password-store" ]]; then
+        info "Password store already initialized"
+        return
+    fi
+
+    # Check if GPG key exists for this email
+    local key_id
+    key_id="$(gpg --list-secret-keys --keyid-format LONG "$USER_EMAIL" 2>/dev/null | grep -m1 'sec' | awk '{print $2}' | cut -d'/' -f2 || true)"
+
+    if [[ -z "$key_id" ]]; then
+        warn "No GPG key found for $USER_EMAIL — cannot initialize pass"
+        return
+    fi
+
+    info "Initializing password store with key $key_id..."
+    try pass init "$key_id" && success "Password store initialized"
 }
 
 # ─── Symlinks ─────────────────────────────────────────────────────────────
@@ -548,6 +623,7 @@ main() {
 
     self_update "$@"
 
+    collect_identity
     setup_package_manager
     setup_cli_tools
     setup_zsh
@@ -555,6 +631,7 @@ main() {
     setup_python
     setup_git_identity
     setup_gpg
+    setup_pass
     setup_symlinks
     setup_post_install
 
