@@ -18,12 +18,53 @@ LOG_FILE=""
 # ─── Packages ─────────────────────────────────────────────────────────────
 # Edit these lists to add/remove packages. The installer handles the rest.
 
-BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl pass htop fd zoxide tldr lazygit lazydocker dust duf procs httpie yq git-delta glow neofetch)
+# Unified package list. Each entry is one of:
+#   name              — same name on brew and apt
+#   name:apt=alt      — brew name is "name", apt name is "alt"
+#   name:apt=_        — brew-only (no apt package, use brew on Linux too)
+#   name:linux=_      — macOS-only (skip on Linux entirely)
+#   name:mac=_        — Linux-only (skip on macOS entirely)
+PACKAGES=(
+    git
+    curl
+    jq
+    "gh"
+    "node:apt=nodejs"
+    npm
+    "nvim:apt=neovim"
+    tmux
+    fzf
+    ripgrep
+    eza
+    bat
+    "pyenv:apt=_"
+    "kubectl:apt=_"
+    pass
+    htop
+    "fd:apt=fd-find"
+    zoxide
+    tldr
+    httpie
+    neofetch
+    glow
+    "lazygit:apt=_"
+    "lazydocker:apt=_"
+    "dust:apt=_"
+    "duf:apt=_"
+    "procs:apt=_"
+    "yq:apt=_"
+    "git-delta:apt=_"
+    # Linux-only
+    "unzip:mac=_"
+    "xclip:mac=_"
+    "gnupg:mac=_"
+    # macOS-only
+    "reattach-to-user-namespace:linux=_"
+)
+
 BREW_CASKS=(font-meslo-lg-nerd-font)
 BREW_TAPS=(jandedobbeleer/oh-my-posh)
 BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
-
-APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass gnupg htop fd-find zoxide tldr httpie neofetch)
 
 ZSH_PLUGINS=(
     "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
@@ -188,6 +229,17 @@ setup_package_manager() {
         info "Upgrading packages..."
         sudo apt-get upgrade -y || warn "Some packages failed to upgrade"
         success "System packages up to date"
+
+        # Install Homebrew on Linux for packages not in apt
+        if has brew; then
+            info "Homebrew (Linux) already installed"
+            try brew update && success "Homebrew updated"
+        else
+            info "Installing Homebrew (Linux)..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv 2>/dev/null)"
+            success "Homebrew (Linux) installed"
+        fi
     fi
 }
 
@@ -195,32 +247,72 @@ setup_package_manager() {
 
 setup_cli_tools() {
     section "CLI tools"
+
+    # Parse unified PACKAGES list and install per-platform
+    local entry brew_name apt_name skip
+    for entry in "${PACKAGES[@]}"; do
+        brew_name="${entry%%:*}"
+        apt_name="$brew_name"
+        skip=false
+
+        # Parse modifiers (apt=, mac=, linux=)
+        if [[ "$entry" == *":"* ]]; then
+            local modifier="${entry#*:}"
+            case "$modifier" in
+                apt=_)    [[ "$OS" != "Darwin" ]] && apt_name="" ;;   # brew-only
+                apt=*)    apt_name="${modifier#apt=}" ;;               # different apt name
+                mac=_)    [[ "$OS" == "Darwin" ]] && skip=true ;;     # Linux-only
+                linux=_)  [[ "$OS" != "Darwin" ]] && skip=true ;;     # macOS-only
+            esac
+        fi
+
+        $skip && continue
+
+        if [[ "$OS" == "Darwin" ]]; then
+            # macOS: always use brew
+            if brew list "$brew_name" &>/dev/null; then
+                info "$brew_name already installed"
+            else
+                info "Installing $brew_name..."
+                try brew install "$brew_name" && success "$brew_name installed"
+            fi
+        else
+            # Linux: use apt if available, otherwise brew
+            if [[ -n "$apt_name" ]]; then
+                if dpkg -s "$apt_name" &>/dev/null; then
+                    info "$apt_name already installed"
+                else
+                    info "Installing $apt_name..."
+                    try sudo apt-get install -y "$apt_name" && success "$apt_name installed"
+                fi
+            else
+                if brew list "$brew_name" &>/dev/null; then
+                    info "$brew_name already installed (brew)"
+                else
+                    info "Installing $brew_name (brew)..."
+                    try brew install "$brew_name" && success "$brew_name installed"
+                fi
+            fi
+        fi
+    done
+
+    # Taps + tap packages
+    local tap
+    for tap in "${BREW_TAPS[@]}"; do
+        brew tap "$tap" 2>/dev/null || true
+    done
+    local pkg
+    for pkg in "${BREW_TAP_PACKAGES[@]}"; do
+        local bin="${pkg##*/}"
+        if brew list "$bin" &>/dev/null; then
+            info "$bin already installed"
+        else
+            info "Installing $bin..."
+            try brew install "$pkg" && success "$bin installed"
+        fi
+    done
+
     if [[ "$OS" == "Darwin" ]]; then
-        local pkg
-        for pkg in "${BREW_PACKAGES[@]}"; do
-            if has "$pkg"; then
-                info "$pkg already installed"
-            else
-                info "Installing $pkg..."
-                try brew install "$pkg" && success "$pkg installed"
-            fi
-        done
-
-        # Taps + tap packages
-        local tap
-        for tap in "${BREW_TAPS[@]}"; do
-            brew tap "$tap" 2>/dev/null || true
-        done
-        for pkg in "${BREW_TAP_PACKAGES[@]}"; do
-            local bin="${pkg##*/}"
-            if has "$bin"; then
-                info "$bin already installed"
-            else
-                info "Installing $bin..."
-                try brew install "$pkg" && success "$bin installed"
-            fi
-        done
-
         # Casks
         local cask
         for cask in "${BREW_CASKS[@]}"; do
@@ -232,33 +324,14 @@ setup_cli_tools() {
             fi
         done
 
-        # Docker Desktop (check binary, not just cask — may be installed outside brew)
+        # Docker Desktop
         if ! has docker; then
             info "Installing Docker Desktop..."
             try brew install --cask docker && success "Docker Desktop installed"
         else
             info "Docker already installed"
         fi
-
-        # tmux-yank clipboard support
-        if has reattach-to-user-namespace; then
-            info "reattach-to-user-namespace already installed"
-        else
-            info "Installing reattach-to-user-namespace..."
-            try brew install reattach-to-user-namespace && success "reattach-to-user-namespace installed"
-        fi
     else
-        # Ubuntu / Debian
-        local pkg
-        for pkg in "${APT_PACKAGES[@]}"; do
-            if dpkg -s "$pkg" &>/dev/null; then
-                info "$pkg already installed"
-            else
-                info "Installing $pkg..."
-                try sudo apt-get install -y "$pkg" && success "$pkg installed"
-            fi
-        done
-
         # oh-my-posh (no apt package)
         if has oh-my-posh || [[ -x "$HOME/.local/bin/oh-my-posh" ]]; then
             info "oh-my-posh already installed"
@@ -266,7 +339,6 @@ setup_cli_tools() {
             info "Installing oh-my-posh..."
             mkdir -p "$HOME/.local/bin"
             if run_piped "oh-my-posh" "https://ohmyposh.dev/install.sh" -s -- -d "$HOME/.local/bin"; then
-                # Ensure it's on PATH for the rest of this script
                 export PATH="$HOME/.local/bin:$PATH"
                 success "oh-my-posh installed"
             else
@@ -289,18 +361,6 @@ setup_cli_tools() {
                 ERRORS+=("Meslo Nerd Font install")
                 warn "Failed: Nerd Font download — install manually"
             fi
-        fi
-
-        # kubectl (needs its own repo)
-        if ! has kubectl; then
-            info "Installing kubectl..."
-            sudo mkdir -p /etc/apt/keyrings
-            curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg 2>/dev/null
-            echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list >/dev/null
-            sudo apt-get update -y
-            try sudo apt-get install -y kubectl && success "kubectl installed"
-        else
-            info "kubectl already installed"
         fi
 
         # Docker
