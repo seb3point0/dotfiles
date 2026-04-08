@@ -18,12 +18,12 @@ LOG_FILE=""
 # ─── Packages ─────────────────────────────────────────────────────────────
 # Edit these lists to add/remove packages. The installer handles the rest.
 
-BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl pass htop)
+BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl pass htop fd zoxide tldr lazygit lazydocker dust duf procs httpie yq git-delta glow neofetch)
 BREW_CASKS=(font-meslo-lg-nerd-font)
 BREW_TAPS=(jandedobbeleer/oh-my-posh)
 BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
 
-APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass gnupg htop)
+APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass gnupg htop fd-find zoxide tldr httpie neofetch)
 
 ZSH_PLUGINS=(
     "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
@@ -526,6 +526,16 @@ setup_git_identity() {
     # Global gitignore
     git config --global core.excludesFile "$HOME/.gitignore_global"
     info "Global gitignore set"
+
+    # Use delta for diffs if available
+    if has delta; then
+        git config --global core.pager delta
+        git config --global interactive.diffFilter 'delta --color-only'
+        git config --global delta.navigate true
+        git config --global delta.dark true
+        git config --global merge.conflictstyle diff3
+        info "Git pager set to delta"
+    fi
 }
 
 # ─── GPG ───────────────────────────────────────────────────────────────────

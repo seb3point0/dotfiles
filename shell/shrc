@@ -23,10 +23,16 @@ alias ll='eza --icons --group-directories-first -la'
 alias la='eza --icons --group-directories-first -a'
 alias lt='eza --icons --group-directories-first --tree --level=2'
 
+# ─── Claude Code ───────────────────────────────────────────────
+alias claudex='claude --dangerously-skip-permissions'
+
+# ─── zoxide (smarter cd) ───────────────────────────────────────
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init "$(basename "$SHELL")")"
+
 # ─── fzf defaults ──────────────────────────────────────────────
 export FZF_DEFAULT_COMMAND='rg --files --hidden --glob "!.git"'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND='find . -type d -not -path "*/\.git/*"'
+export FZF_ALT_C_COMMAND='fd --type d --hidden --exclude .git'
 export FZF_DEFAULT_OPTS="
   --color=fg:#D8DEE9,bg:#2E3440,hl:#88C0D0
   --color=fg+:#ECEFF4,bg+:#434C5E,hl+:#8FBCBB

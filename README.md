@@ -25,7 +25,10 @@ The installer is idempotent — safe to re-run at any time. It skips anything al
 | Shell | zsh, oh-my-zsh, oh-my-posh, nerd font |
 | Editor | neovim, lazy.nvim (auto-bootstraps) |
 | Terminal | tmux, tpm, tmux-powerline, tmux-continuum |
-| CLI tools | fzf, ripgrep, eza, bat, jq, gh, curl, pass |
+| CLI tools | fzf, ripgrep, eza, bat, jq, gh, curl, pass, fd, zoxide, htop, tldr, httpie, glow, neofetch |
+| Git tools | git-delta (syntax-highlighted diffs), lazygit (terminal UI) |
+| System | dust (disk usage), duf (disk free), procs (process viewer) |
+| DevOps | lazydocker, yq (YAML processor) |
 | Languages | pyenv, python 3.x, pip, virtualenv, node, npm |
 | Containers | docker, kubectl |
 | Security | gnupg, pinentry, pass (password store) |
@@ -69,7 +72,7 @@ Login (once per session):
   .bash_profile         sources .profile + .bashrc
 
 Interactive (every shell):
-  shell/shrc            shared aliases, EDITOR, fzf, eza, bat, auto-tmux
+  shell/shrc            shared aliases, EDITOR, fzf, eza, bat, zoxide, auto-tmux
   .zshrc                sources shrc + oh-my-zsh + oh-my-posh (zsh)
   .bashrc               sources shrc + oh-my-posh (bash)
 
@@ -134,6 +137,19 @@ Prefix is `Ctrl-s`. Key bindings:
 | `prefix + I` | Install plugins (TPM) |
 
 Sessions auto-save every 15 minutes and auto-restore on tmux start via tmux-continuum.
+
+## Aliases
+
+Defined in `shell/shrc` (shared by zsh and bash):
+
+| Alias | Command |
+|-------|---------|
+| `ls` | `eza --icons --group-directories-first` |
+| `ll` | `eza --icons --group-directories-first -la` |
+| `la` | `eza --icons --group-directories-first -a` |
+| `lt` | `eza --icons --group-directories-first --tree --level=2` |
+| `claudex` | `claude --dangerously-skip-permissions` |
+| `cd` | `zoxide` (auto-initialized, use `z` to jump by frecency) |
 
 ## Color theme
 
