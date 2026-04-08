@@ -142,25 +142,6 @@
           "type": "sysinfo"
         },
         {
-          "background": "p:nord11",
-          "background_templates": [
-            "{{if eq \"Charging\" .State.String}}p:nord14{{end}}",
-            "{{if eq \"Discharging\" .State.String}}p:nord13{{end}}",
-            "{{if eq \"Full\" .State.String}}p:nord14{{end}}"
-          ],
-          "foreground": "p:nord0",
-          "invert_powerline": true,
-          "leading_diamond": "",
-          "options": {
-            "charged_icon": " ",
-            "charging_icon": " ",
-            "discharging_icon": " "
-          },
-          "style": "plain",
-          "template": " {{ if not .Error }}{{ .Icon }}{{ .Percentage }}{{ end }}{{ .Error }} <p:nord0></>",
-          "type": "battery"
-        },
-        {
           "background": "p:nord0",
           "foreground": "p:nord14",
           "style": "plain",

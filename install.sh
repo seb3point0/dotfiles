@@ -18,12 +18,12 @@ LOG_FILE=""
 # ─── Packages ─────────────────────────────────────────────────────────────
 # Edit these lists to add/remove packages. The installer handles the rest.
 
-BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl pass)
+BREW_PACKAGES=(git curl jq gh node npm nvim tmux fzf ripgrep eza bat pyenv kubectl pass htop)
 BREW_CASKS=(font-meslo-lg-nerd-font)
 BREW_TAPS=(jandedobbeleer/oh-my-posh)
 BREW_TAP_PACKAGES=(jandedobbeleer/oh-my-posh/oh-my-posh)
 
-APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass gnupg)
+APT_PACKAGES=(git curl unzip jq gh nodejs npm neovim tmux fzf ripgrep eza bat xclip pass gnupg htop)
 
 ZSH_PLUGINS=(
     "zsh-autosuggestions|https://github.com/zsh-users/zsh-autosuggestions"
@@ -35,7 +35,7 @@ PYENV_BUILD_DEPS=(make build-essential libssl-dev zlib1g-dev libbz2-dev
     libreadline-dev libsqlite3-dev wget llvm libncursesw5-dev xz-utils
     tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev)
 
-PIP_PACKAGES=(virtualenv)
+PIP_PACKAGES=(virtualenv libtmux)
 
 SYMLINKS=(
     "shell/.profile|.profile"

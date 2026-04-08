@@ -52,7 +52,6 @@ fi
 if [ -z "$TMUX_POWERLINE_LEFT_STATUS_SEGMENTS" ]; then
 	TMUX_POWERLINE_LEFT_STATUS_SEGMENTS=(
 		"session_prefix ${NORD1} ${NORD6} default_separator no_sep_bg_color no_sep_fg_color both_disable separator_disable"
-		"vcs_branch ${NORD1} ${NORD14}"
 	)
 fi
 
