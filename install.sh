@@ -223,6 +223,21 @@ sudo() {
     fi
 }
 
+# ─── curl bootstrap ────────────────────────────────────────────────────────
+
+ensure_curl() {
+    has curl && return 0
+    section "curl"
+    info "curl not found — installing..."
+    if [[ "$OS" == "Linux" ]]; then
+        sudo apt-get update -y
+        sudo apt-get install -y curl && success "curl installed"
+    else
+        warn "curl missing on macOS — install Xcode Command Line Tools and re-run"
+        return 1
+    fi
+}
+
 # ─── Bootstrap ─────────────────────────────────────────────────────────────
 # When piped via curl, clone the repo first then re-exec from disk.
 
@@ -850,8 +865,9 @@ main() {
 
     self_update "$@"
 
-    collect_identity
     prime_sudo
+    ensure_curl
+    collect_identity
     setup_package_manager
     setup_zsh
     setup_symlinks
