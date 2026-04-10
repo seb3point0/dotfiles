@@ -46,7 +46,7 @@ PACKAGES=(
     tldr
     httpie
     neofetch
-    glow
+    "glow:apt=_"
     "lazygit:apt=_"
     "lazydocker:apt=_"
     "dust:apt=_"
@@ -231,6 +231,10 @@ setup_package_manager() {
         success "System packages up to date"
 
         # Install Homebrew on Linux for packages not in apt
+        # Source shellenv first so `has brew` works in fresh/non-login shells
+        if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        fi
         if has brew; then
             info "Homebrew (Linux) already installed"
             try brew update && success "Homebrew updated"
@@ -332,20 +336,7 @@ setup_cli_tools() {
             info "Docker already installed"
         fi
     else
-        # oh-my-posh (no apt package)
-        if has oh-my-posh || [[ -x "$HOME/.local/bin/oh-my-posh" ]]; then
-            info "oh-my-posh already installed"
-        else
-            info "Installing oh-my-posh..."
-            mkdir -p "$HOME/.local/bin"
-            if run_piped "oh-my-posh" "https://ohmyposh.dev/install.sh" -s -- -d "$HOME/.local/bin"; then
-                export PATH="$HOME/.local/bin:$PATH"
-                success "oh-my-posh installed"
-            else
-                ERRORS+=("oh-my-posh install")
-                warn "Failed: oh-my-posh install — see $LOG_FILE"
-            fi
-        fi
+        # oh-my-posh is installed on Linux via BREW_TAP_PACKAGES above
 
         # Nerd Font (no apt package)
         local font_dir="$HOME/.local/share/fonts"
