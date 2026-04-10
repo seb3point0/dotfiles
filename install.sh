@@ -150,6 +150,60 @@ try() {
     fi
 }
 
+# ─── Sudo keepalive ────────────────────────────────────────────────────────
+# Prompt for sudo once, then refresh the timestamp in the background so
+# later steps (apt, pyenv build deps, chsh) don't re-prompt mid-run.
+#
+# Security bounds applied to the background refresher:
+#   1. Signal traps (EXIT/INT/TERM/HUP) kill it in every normal exit path.
+#   2. Hardcoded 30-minute max lifetime — upper bound if something stalls.
+#   3. Parent process identity check via lstart — kill -0 alone is fooled
+#      by PID reuse after SIGKILL; lstart changes when a PID is recycled.
+#   4. `sudo -k` on cleanup — revokes the cached credentials, so even an
+#      orphaned refresher self-terminates (its next `sudo -n true` fails).
+SUDO_KEEPALIVE_PID=""
+
+prime_sudo() {
+    [[ $EUID -eq 0 ]] && return 0   # already root, nothing to do
+    section "Sudo"
+    info "Priming sudo for the rest of the install..."
+    if ! sudo -v; then
+        warn "Could not acquire sudo — later steps may prompt again"
+        return 1
+    fi
+    local parent_pid=$$
+    local parent_start
+    parent_start="$(ps -o lstart= -p "$parent_pid" 2>/dev/null || true)"
+    (
+        local elapsed=0 max=1800 cur=""
+        while (( elapsed < max )); do
+            # Any of these conditions terminates the loop cleanly:
+            sudo -n true 2>/dev/null || exit 0          # cache revoked
+            sleep 50
+            elapsed=$(( elapsed + 50 ))
+            kill -0 "$parent_pid" 2>/dev/null || exit 0 # parent gone
+            cur="$(ps -o lstart= -p "$parent_pid" 2>/dev/null || true)"
+            [[ "$cur" == "$parent_start" ]] || exit 0   # PID reused
+        done
+    ) &
+    SUDO_KEEPALIVE_PID=$!
+    trap 'stop_sudo_keepalive' EXIT
+    trap 'stop_sudo_keepalive; exit 130' INT
+    trap 'stop_sudo_keepalive; exit 143' TERM HUP
+    success "Sudo primed"
+}
+
+stop_sudo_keepalive() {
+    if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        SUDO_KEEPALIVE_PID=""
+    fi
+    # Revoke the cached credentials. Belt-and-suspenders: if the refresher
+    # survived (e.g. SIGKILL'd parent + PID reuse), its next `sudo -n true`
+    # will fail against the revoked cache and the loop will exit on its own.
+    sudo -k 2>/dev/null || true
+}
+
 # ─── Bootstrap ─────────────────────────────────────────────────────────────
 # When piped via curl, clone the repo first then re-exec from disk.
 
@@ -308,11 +362,12 @@ setup_cli_tools() {
     local pkg
     for pkg in "${BREW_TAP_PACKAGES[@]}"; do
         local bin="${pkg##*/}"
-        if brew list "$bin" &>/dev/null; then
+        # --formula avoids hitting broken cask definitions in taps
+        if brew list --formula "$bin" &>/dev/null; then
             info "$bin already installed"
         else
             info "Installing $bin..."
-            try brew install "$pkg" && success "$bin installed"
+            try brew install --formula "$pkg" && success "$bin installed"
         fi
     done
 
@@ -774,6 +829,7 @@ main() {
     self_update "$@"
 
     collect_identity
+    prime_sudo
     setup_package_manager
     setup_zsh
     setup_symlinks
@@ -810,6 +866,7 @@ main() {
     # Launch zsh so the user gets the configured prompt immediately
     if has zsh; then
         info "Launching zsh..."
+        stop_sudo_keepalive
         exec zsh -l
     fi
 }
