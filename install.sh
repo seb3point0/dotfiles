@@ -186,9 +186,9 @@ prime_sudo() {
     info "This installer requires sudo access to install packages."
     ulimit -c 0 2>/dev/null || true   # no core dumps while pw is in memory
 
-    printf '  \033[1;34m→\033[0m sudo password for %s: ' "$USER"
-    IFS= read -rs SUDO_PASSWORD
-    printf '\n'
+    printf '  \033[1;34m→\033[0m sudo password for %s: ' "$USER" > /dev/tty
+    IFS= read -rs SUDO_PASSWORD < /dev/tty
+    printf '\n' > /dev/tty
 
     if [[ -z "$SUDO_PASSWORD" ]]; then
         warn "Empty password — later sudo calls will prompt"
@@ -260,9 +260,9 @@ self_update() {
     [[ -d "$DOTFILES/.git" ]] || return 0
     git -C "$DOTFILES" remote get-url origin &>/dev/null || return 0
 
-    info "Checking for dotfiles updates..."
+    log "Checking for dotfiles updates..."
     if ! git -C "$DOTFILES" fetch --quiet origin main 2>/dev/null; then
-        warn "Could not reach remote — running with local version"
+        log "Could not reach remote — running with local version"
         return 0
     fi
 
@@ -271,13 +271,12 @@ self_update() {
     remote_sha="$(git -C "$DOTFILES" rev-parse origin/main 2>/dev/null || echo "$local_sha")"
 
     if [[ "$local_sha" != "$remote_sha" ]]; then
-        info "Pulling latest dotfiles..."
         git -C "$DOTFILES" pull --ff-only --quiet
-        info "Updated — re-running installer"
+        log "Dotfiles updated — re-running installer"
         exec bash "$DOTFILES/install.sh" "$@"
     fi
 
-    info "Dotfiles up to date"
+    log "Dotfiles up to date"
 }
 
 # ─── Package manager ──────────────────────────────────────────────────────
@@ -840,6 +839,7 @@ setup_post_install() {
 main() {
     bootstrap "$@"
     setup_logging
+    self_update "$@"
 
     printf '\033[1;36m'
     printf '  ┌──────────────────────────┐\n'
@@ -848,8 +848,6 @@ main() {
     printf '\033[0m'
     printf '  OS: %s | Dotfiles: %s\n' "$OS" "$DOTFILES"
     log "OS: $OS | Dotfiles: $DOTFILES"
-
-    self_update "$@"
 
     prime_sudo
     collect_identity
