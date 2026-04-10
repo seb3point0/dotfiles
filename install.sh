@@ -112,6 +112,14 @@ section() { printf '\n\033[1m── %s ──\033[0m\n' "$*"; log "===== $* ====
 
 has() { command -v "$1" &>/dev/null; }
 
+# Wrapper for apt-get on Linux: suppresses needrestart spam and routes all
+# output to the log file. Users only see the info/success lines we print.
+apt_get() {
+    run_quiet "apt-get $*" \
+        sudo env NEEDRESTART_SUSPEND=1 DEBIAN_FRONTEND=noninteractive \
+        apt-get "$@"
+}
+
 # Run a command, logging full output. Only show our own messages to the user.
 run_quiet() {
     local label="$1"; shift
@@ -240,7 +248,8 @@ bootstrap() {
         if [[ "$OS" == "Darwin" ]]; then
             xcode-select --install 2>/dev/null || true
         else
-            sudo apt-get update -y && sudo apt-get install -y git
+            sudo env NEEDRESTART_SUSPEND=1 DEBIAN_FRONTEND=noninteractive apt-get update -y -q
+            sudo env NEEDRESTART_SUSPEND=1 DEBIAN_FRONTEND=noninteractive apt-get install -y -q git
         fi
     fi
 
@@ -299,9 +308,9 @@ setup_package_manager() {
         fi
     else
         info "Updating apt..."
-        sudo apt-get update -y
+        apt_get update -y
         info "Upgrading packages..."
-        sudo apt-get upgrade -y || warn "Some packages failed to upgrade"
+        apt_get upgrade -y || warn "Some packages failed to upgrade"
         success "System packages up to date"
 
         # Install Homebrew on Linux for packages not in apt
@@ -361,7 +370,7 @@ setup_cli_tools() {
                     info "$apt_name already installed"
                 else
                     info "Installing $apt_name..."
-                    try sudo apt-get install -y "$apt_name" && success "$apt_name installed"
+                    try apt_get install -y "$apt_name" && success "$apt_name installed"
                 fi
             else
                 if brew list "$brew_name" &>/dev/null; then
@@ -454,7 +463,7 @@ setup_zsh() {
         if [[ "$OS" == "Darwin" ]]; then
             try brew install zsh
         else
-            try sudo apt-get install -y zsh
+            try apt_get install -y zsh
         fi
     else
         info "zsh already installed"
@@ -527,7 +536,7 @@ setup_python() {
     # Build deps (Linux)
     if [[ "$OS" == "Linux" ]]; then
         info "Installing pyenv build dependencies..."
-        sudo apt-get install -y "${PYENV_BUILD_DEPS[@]}" 2>/dev/null || warn "Some build deps failed"
+        apt_get install -y "${PYENV_BUILD_DEPS[@]}" || warn "Some build deps failed"
     fi
 
     # pyenv
