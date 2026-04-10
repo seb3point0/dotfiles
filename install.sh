@@ -150,58 +150,77 @@ try() {
     fi
 }
 
-# ─── Sudo keepalive ────────────────────────────────────────────────────────
-# Prompt for sudo once, then refresh the timestamp in the background so
-# later steps (apt, pyenv build deps, chsh) don't re-prompt mid-run.
+# ─── Sudo wrapper ──────────────────────────────────────────────────────────
+# Prompt for the sudo password once, cache it in an unexported shell
+# variable, and feed it via stdin to every subsequent sudo call using -S.
+# This is deterministic across distros regardless of sudoers timestamp
+# caching behavior, and doesn't require a backgrounded refresher.
 #
-# Security bounds applied to the background refresher:
-#   1. Signal traps (EXIT/INT/TERM/HUP) kill it in every normal exit path.
-#   2. Hardcoded 30-minute max lifetime — upper bound if something stalls.
-#   3. Parent process identity check via lstart — kill -0 alone is fooled
-#      by PID reuse after SIGKILL; lstart changes when a PID is recycled.
-#   4. `sudo -k` on cleanup — revokes the cached credentials, so even an
-#      orphaned refresher self-terminates (its next `sudo -n true` fails).
-SUDO_KEEPALIVE_PID=""
+# Security model:
+#   - Password lives in a single non-exported shell variable. Not written
+#     to disk, not in argv, not in the environment, not logged.
+#   - `sudo -S -p ''` reads from stdin silently, so the password never
+#     echoes to the terminal and no askpass helper is needed.
+#   - Cleanup (EXIT/INT/TERM/HUP) clears the variable and runs `sudo -k`
+#     so the cached timestamp is invalidated before the script hands off
+#     to the user's login shell.
+#   - Disables core dumps via `ulimit -c 0` to avoid leaking the variable
+#     to a crash dump.
+#   - `readonly` is intentionally NOT used — we need to clear it on exit.
+#
+# STDIN HAZARD — read this before adding new sudo calls:
+#   The wrapper pipes the password into sudo's stdin. Two consequences:
+#     1. Upstream pipes are hijacked: `foo | sudo bar` — bar does NOT
+#        see foo's output. Use a here-string or `sudo sh -c '... "$1" ...' _ arg`.
+#     2. If the *target* command itself reads stdin (e.g. tee, cat, read),
+#        it may consume leftover password bytes from the pipe buffer when
+#        the sudo cache is warm and sudo skips reading. Never run sudo on
+#        a command that reads stdin through this wrapper.
+#   The only stdin-reading sudo call in this script (echo | sudo tee) was
+#   rewritten to `sudo sh -c 'printf ... >> FILE' _ "$arg"` in setup_zsh.
+SUDO_PASSWORD=""
 
 prime_sudo() {
     [[ $EUID -eq 0 ]] && return 0   # already root, nothing to do
     section "Sudo"
-    info "Priming sudo for the rest of the install..."
-    if ! sudo -v; then
-        warn "Could not acquire sudo — later steps may prompt again"
+    ulimit -c 0 2>/dev/null || true   # no core dumps while pw is in memory
+
+    printf '  \033[1;34m→\033[0m sudo password for %s: ' "$USER"
+    IFS= read -rs SUDO_PASSWORD
+    printf '\n'
+
+    if [[ -z "$SUDO_PASSWORD" ]]; then
+        warn "Empty password — later sudo calls will prompt"
         return 1
     fi
-    local parent_pid=$$
-    local parent_start
-    parent_start="$(ps -o lstart= -p "$parent_pid" 2>/dev/null || true)"
-    (
-        local elapsed=0 max=1800 cur=""
-        while (( elapsed < max )); do
-            # Any of these conditions terminates the loop cleanly:
-            sudo -n true 2>/dev/null || exit 0          # cache revoked
-            sleep 50
-            elapsed=$(( elapsed + 50 ))
-            kill -0 "$parent_pid" 2>/dev/null || exit 0 # parent gone
-            cur="$(ps -o lstart= -p "$parent_pid" 2>/dev/null || true)"
-            [[ "$cur" == "$parent_start" ]] || exit 0   # PID reused
-        done
-    ) &
-    SUDO_KEEPALIVE_PID=$!
-    trap 'stop_sudo_keepalive' EXIT
-    trap 'stop_sudo_keepalive; exit 130' INT
-    trap 'stop_sudo_keepalive; exit 143' TERM HUP
-    success "Sudo primed"
+
+    # Validate the password without caching globally — catches typos now.
+    if ! printf '%s\n' "$SUDO_PASSWORD" | command sudo -S -p '' -v 2>/dev/null; then
+        warn "Sudo authentication failed — later sudo calls will prompt"
+        SUDO_PASSWORD=""
+        return 1
+    fi
+
+    trap 'clear_sudo_password' EXIT
+    trap 'clear_sudo_password; exit 130' INT
+    trap 'clear_sudo_password; exit 143' TERM HUP
+    success "Sudo authenticated"
 }
 
-stop_sudo_keepalive() {
-    if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
-        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
-        SUDO_KEEPALIVE_PID=""
+clear_sudo_password() {
+    SUDO_PASSWORD=""
+    command sudo -k 2>/dev/null || true
+}
+
+# Transparent sudo override. When the cached password is set, feed it via
+# stdin with -S so sudo never prompts. Otherwise fall through to real sudo
+# (e.g. for root user, or if auth failed and we're in best-effort mode).
+sudo() {
+    if [[ -n "${SUDO_PASSWORD:-}" ]]; then
+        printf '%s\n' "$SUDO_PASSWORD" | command sudo -S -p '' "$@"
+    else
+        command sudo "$@"
     fi
-    # Revoke the cached credentials. Belt-and-suspenders: if the refresher
-    # survived (e.g. SIGKILL'd parent + PID reuse), its next `sudo -n true`
-    # will fail against the revoked cache and the loop will exit on its own.
-    sudo -k 2>/dev/null || true
 }
 
 # ─── Bootstrap ─────────────────────────────────────────────────────────────
@@ -473,7 +492,10 @@ setup_zsh() {
     if [[ "$SHELL" != *zsh* ]]; then
         info "Setting zsh as default shell..."
         if ! grep -qxF "$zsh_path" /etc/shells 2>/dev/null; then
-            echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+            # Avoid piping into sudo — the sudo() wrapper uses stdin for
+            # the password, which would hijack tee's input. Use sh -c
+            # with the path passed as a positional argument ($1) instead.
+            sudo sh -c 'printf "%s\n" "$1" >> /etc/shells' _ "$zsh_path"
         fi
         try chsh -s "$zsh_path" && success "Default shell set to zsh"
     else
@@ -866,7 +888,7 @@ main() {
     # Launch zsh so the user gets the configured prompt immediately
     if has zsh; then
         info "Launching zsh..."
-        stop_sudo_keepalive
+        clear_sudo_password
         exec zsh -l
     fi
 }
