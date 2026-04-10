@@ -1,5 +1,5 @@
 # ─── Shared config (aliases, env vars, fzf) ───────────────────
-[ -f ~/.dotfiles/shell/shrc ] && . ~/.dotfiles/shell/shrc
+[ -f ~/.shrc ] && . ~/.shrc
 
 # ─── fzf key bindings (bash) ──────────────────────────────────
 [ -f /usr/share/doc/fzf/examples/key-bindings.bash ] && . /usr/share/doc/fzf/examples/key-bindings.bash

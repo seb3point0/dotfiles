@@ -80,6 +80,7 @@ PIP_PACKAGES=(virtualenv libtmux)
 
 SYMLINKS=(
     "shell/.profile|.profile"
+    "shell/shrc|.shrc"
     "zsh/.zshrc|.zshrc"
     "zsh/.zprofile|.zprofile"
     "bash/.bash_profile|.bash_profile"
@@ -806,7 +807,7 @@ setup_symlinks() {
     done
 
     # Machine-specific overrides
-    for local_rc in .zshrc.local .bashrc.local; do
+    for local_rc in .shrc.local .zshrc.local .bashrc.local; do
         if [[ ! -f "$HOME/$local_rc" ]]; then
             touch "$HOME/$local_rc"
             info "Created empty ~/$local_rc"
@@ -880,7 +881,8 @@ main() {
     echo
     printf '  \033[1mNotes:\033[0m\n'
     printf '    Set your terminal font to a Nerd Font (e.g. MesloLGS NF)\n'
-    printf '    Machine-specific config goes in ~/.zshrc.local or ~/.bashrc.local\n'
+    printf '    Shared machine-specific config goes in ~/.shrc.local\n'
+    printf '    Shell-specific config goes in ~/.zshrc.local or ~/.bashrc.local\n'
     printf '    Full log: %s\n' "$LOG_FILE"
     echo
 

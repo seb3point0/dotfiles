@@ -1,5 +1,5 @@
 # ─── Shared config (aliases, env vars, fzf) ───────────────────
-[ -f ~/.dotfiles/shell/shrc ] && . ~/.dotfiles/shell/shrc
+[ -f ~/.shrc ] && . ~/.shrc
 
 # ─── Oh My Zsh ─────────────────────────────────────────────────
 export ZSH="$HOME/.oh-my-zsh"

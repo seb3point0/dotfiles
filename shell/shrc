@@ -50,3 +50,8 @@ if command -v tmux >/dev/null 2>&1 \
     && [ -t 0 ]; then
   tmux attach-session 2>/dev/null || tmux new-session
 fi
+
+# ─── Shared local overrides (machine-specific) ────────────────
+# Put anything here that applies to both zsh and bash on this
+# machine (extra aliases, env vars, work-specific paths, etc.)
+[ -f ~/.shrc.local ] && . ~/.shrc.local
