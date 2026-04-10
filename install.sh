@@ -183,6 +183,7 @@ SUDO_PASSWORD=""
 prime_sudo() {
     [[ $EUID -eq 0 ]] && return 0   # already root, nothing to do
     section "Sudo"
+    info "This installer requires sudo access to install packages."
     ulimit -c 0 2>/dev/null || true   # no core dumps while pw is in memory
 
     printf '  \033[1;34m→\033[0m sudo password for %s: ' "$USER"
@@ -220,21 +221,6 @@ sudo() {
         printf '%s\n' "$SUDO_PASSWORD" | command sudo -S -p '' "$@"
     else
         command sudo "$@"
-    fi
-}
-
-# ─── curl bootstrap ────────────────────────────────────────────────────────
-
-ensure_curl() {
-    has curl && return 0
-    section "curl"
-    info "curl not found — installing..."
-    if [[ "$OS" == "Linux" ]]; then
-        sudo apt-get update -y
-        sudo apt-get install -y curl && success "curl installed"
-    else
-        warn "curl missing on macOS — install Xcode Command Line Tools and re-run"
-        return 1
     fi
 }
 
@@ -866,7 +852,6 @@ main() {
     self_update "$@"
 
     prime_sudo
-    ensure_curl
     collect_identity
     setup_package_manager
     setup_zsh
