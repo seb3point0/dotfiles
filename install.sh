@@ -35,7 +35,7 @@ PACKAGES=(
     tmux
     fzf
     ripgrep
-    eza
+    "eza:apt=_"
     bat
     "pyenv:apt=_"
     "kubectl:apt=_"
@@ -507,7 +507,12 @@ setup_zsh() {
             # with the path passed as a positional argument ($1) instead.
             sudo sh -c 'printf "%s\n" "$1" >> /etc/shells' _ "$zsh_path"
         fi
-        try chsh -s "$zsh_path" && success "Default shell set to zsh"
+        if [[ "$OS" == "Linux" ]]; then
+            # chsh requires a TTY for PAM auth; usermod works non-interactively
+            try sudo usermod -s "$zsh_path" "$USER" && success "Default shell set to zsh"
+        else
+            try chsh -s "$zsh_path" && success "Default shell set to zsh"
+        fi
     else
         info "zsh is already the default shell"
     fi
