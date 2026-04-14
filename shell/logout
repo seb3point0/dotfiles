@@ -1,5 +1,8 @@
 # ─── Shared logout ─────────────────────────────────────────────
 # Sourced by .zlogout and .bash_logout.
 
+# Disable terminal mouse tracking (prevents garbage on SSH disconnect)
+printf '\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?1015l' 2>/dev/null
+
 # Clear terminal on logout
 clear
